@@ -7,6 +7,10 @@ import com.elias.auth.dto.UserInfoDTO;
 import com.elias.auth.entity.LoginLog;
 
 import java.util.List;
+/**
+ * 文件说明： AuthAppService.
+ * 组件职责： 项目中的通用组件。
+ */
 
 public interface AuthAppService {
     void register(RegisterRequest request);

@@ -1,4 +1,8 @@
 package com.elias.common.security;
+/**
+ * 文件说明： UserHeaderNames.
+ * 组件职责： 项目中的通用组件。
+ */
 
 public final class UserHeaderNames {
 

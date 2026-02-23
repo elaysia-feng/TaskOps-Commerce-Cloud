@@ -1,28 +1,30 @@
-version: "3.9"
 services:
   nacos:
-    image: nacos/nacos-server:v2.2.3
+    image: docker.m.daocloud.io/nacos/nacos-server:v2.3.2
     container_name: taskops-nacos
     environment:
       MODE: standalone
       PREFER_HOST_MODE: hostname
       JVM_XMS: 256m
       JVM_XMX: 256m
-      JVM_XMN: 128m
     ports:
       - "8848:8848"
+      - "9848:9848"
+      - "9849:9849"
 
   mysql:
-    image: mysql:8
+    image: mysql:8.0.18
     container_name: taskops-mysql
     environment:
       MYSQL_ROOT_PASSWORD: root
       TZ: Asia/Shanghai
     ports:
       - "3307:3306"
+    volumes:
+      - /home/elias/springCloud/mysql-data:/var/lib/mysql
 
   redis:
     image: docker.m.daocloud.io/library/redis:7-alpine
     container_name: taskops-redis
     ports:
-      - "6379:6379"
+      - "6380:6379"

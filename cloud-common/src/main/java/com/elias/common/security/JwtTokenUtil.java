@@ -7,6 +7,10 @@ import org.springframework.http.HttpHeaders;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
+/**
+ * 文件说明： JwtTokenUtil.
+ * 组件职责： 项目中的通用组件。
+ */
 
 public final class JwtTokenUtil {
 

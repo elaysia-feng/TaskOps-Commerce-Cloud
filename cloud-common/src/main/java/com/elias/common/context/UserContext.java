@@ -3,6 +3,10 @@ package com.elias.common.context;
 import com.elias.common.security.UserHeaderNames;
 
 import javax.servlet.http.HttpServletRequest;
+/**
+ * 文件说明： UserContext.
+ * 组件职责： 项目中的通用组件。
+ */
 
 public final class UserContext {
 

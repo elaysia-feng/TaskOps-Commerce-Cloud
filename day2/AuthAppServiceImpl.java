@@ -16,70 +16,53 @@ import com.elias.auth.mapper.UserRoleMapper;
 import com.elias.auth.security.JwtTokenProvider;
 import com.elias.auth.service.AuthAppService;
 import com.elias.common.exception.BizException;
-import com.elias.common.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
+/**
+ * 文件说明：认证服务业务实现。
+ * 组件职责：
+ * 1) 用户注册与登录。
+ * 2) 登录失败计数与临时锁定（Redis 风控）。
+ * 3) 签发 JWT 并记录登录日志。
+ * 4) 提供内部用户信息查询能力。
+ */
 public class AuthAppServiceImpl implements AuthAppService {
 
     private static final String FAIL_KEY_PREFIX = "auth:fail:";
     private static final String LOCK_KEY_PREFIX = "auth:lock:";
 
-    private final LoginLogMapper loginLogMapper;
     private final UserMapper userMapper;
     private final RoleMapper roleMapper;
-    private final PasswordEncoder passwordEncoder;
     private final UserRoleMapper userRoleMapper;
-    private final StringRedisTemplate stringRedisTemplate;
+    private final LoginLogMapper loginLogMapper;
+    private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
+    private final StringRedisTemplate redisTemplate;
+
 
     @Override
-    public UserInfoDTO getUserInfo(Long userId) {
-        if (userId == null || userId <= 0) {
-            throw new BizException(ErrorCode.USERID_NULL);
-        }
-
-        User user = userMapper.selectById(userId);
-        if (user == null) {
-            return null;
-        }
-
-        UserInfoDTO userInfoDTO = new UserInfoDTO();
-        userInfoDTO.setUserId(user.getId());
-        userInfoDTO.setUsername(user.getUsername());
-        userInfoDTO.setNickname(user.getNickname());
-        userInfoDTO.setStatus(user.getStatus());
-        userInfoDTO.setRoles(roleMapper.findRoleCodesByUserId(userId));
-        return userInfoDTO;
-    }
-
-    @Override
+    /**
+     * 注册新用户：
+     * 1) 校验用户名是否存在；
+     * 2) 写入用户信息；
+     * 3) 绑定默认 USER 角色。
+     */
     public void register(RegisterRequest request) {
-        if (request == null
-                || !StringUtils.hasText(request.getUsername())
-                || !StringUtils.hasText(request.getPassword())
-                || !StringUtils.hasText(request.getNickname())) {
-            throw new BizException(ErrorCode.USER_CREATE_NULL);
-        }
-
         User existed = userMapper.selectOne(new LambdaQueryWrapper<User>()
                 .eq(User::getUsername, request.getUsername())
                 .last("limit 1"));
         if (existed != null) {
-            throw new BizException(ErrorCode.USERNAME_ALREADY_EXISTS);
+            throw new BizException(4091, "username already exists");
         }
-
         User user = new User();
         user.setUsername(request.getUsername());
         user.setPassword(passwordEncoder.encode(request.getPassword()));
@@ -89,50 +72,66 @@ public class AuthAppServiceImpl implements AuthAppService {
         user.setUpdatedAt(LocalDateTime.now());
         userMapper.insert(user);
 
-        Role role = roleMapper.selectOne(new LambdaQueryWrapper<Role>()
+        Role userRole = roleMapper.selectOne(new LambdaQueryWrapper<Role>()
                 .eq(Role::getRoleCode, "USER")
                 .last("limit 1"));
-        if (role == null) {
-            throw new BizException(ErrorCode.ROLE_NOT_FOUND);
+        if (userRole != null) {
+            UserRole link = new UserRole();
+            link.setUserId(user.getId());
+            link.setRoleId(userRole.getId());
+            userRoleMapper.insert(link);
         }
-
-        UserRole userRole = new UserRole();
-        userRole.setUserId(user.getId());
-        userRole.setRoleId(role.getId());
-        userRoleMapper.insert(userRole);
     }
 
     @Override
+    /**
+     * 登录流程：
+     * 1) 先检查是否处于锁定状态；
+     * 2) 校验用户名密码；
+     * 3) 成功则签发 JWT；
+     * 4) 失败则累计失败次数并可能锁定账号。
+     */
     public LoginResponse login(LoginRequest request, String ip) {
-        if (request == null
-                || !StringUtils.hasText(request.getUsername())
-                || !StringUtils.hasText(request.getPassword())) {
-            throw new BizException(ErrorCode.USER_CREATE_NULL);
-        }
-
         String lockKey = LOCK_KEY_PREFIX + request.getUsername();
-        if (Boolean.TRUE.equals(stringRedisTemplate.hasKey(lockKey))) {
-            throw new BizException(ErrorCode.LOGIN_TEMP_LOCKED);
+        if (Boolean.TRUE.equals(redisTemplate.hasKey(lockKey))) {
+            throw new BizException(4012, "account temporary locked");
         }
-
         User user = userMapper.selectOne(new LambdaQueryWrapper<User>()
                 .eq(User::getUsername, request.getUsername())
                 .last("limit 1"));
         if (user == null || !passwordEncoder.matches(request.getPassword(), user.getPassword())) {
             onLoginFail(request.getUsername(), ip);
-            throw new BizException(ErrorCode.LOGIN_INVALID_CREDENTIALS);
+            throw new BizException(4011, "username or password invalid");
         }
-
         List<String> roles = roleMapper.findRoleCodesByUserId(user.getId());
         String token = jwtTokenProvider.createToken(user.getId(), user.getUsername(), roles);
-
-        stringRedisTemplate.delete(FAIL_KEY_PREFIX + request.getUsername());
-        writeLoginLog(request.getUsername(), ip, 1, "登录成功");
-
+        redisTemplate.delete(FAIL_KEY_PREFIX + request.getUsername());
+        writeLoginLog(request.getUsername(), ip, 1, "success");
         return new LoginResponse(token, user.getId(), user.getUsername(), roles);
     }
 
     @Override
+    /**
+     * 根据用户 ID 查询用户信息（供内部服务调用）。
+     */
+    public UserInfoDTO getUserInfo(Long userId) {
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            return null;
+        }
+        UserInfoDTO dto = new UserInfoDTO();
+        dto.setUserId(user.getId());
+        dto.setUsername(user.getUsername());
+        dto.setNickname(user.getNickname());
+        dto.setStatus(user.getStatus());
+        dto.setRoles(roleMapper.findRoleCodesByUserId(user.getId()));
+        return dto;
+    }
+
+    @Override
+    /**
+     * 查询最近登录日志（管理侧使用）。
+     */
     public List<LoginLog> latestLoginLogs(int limit) {
         int safeLimit = Math.max(1, Math.min(200, limit));
         return loginLogMapper.selectList(new LambdaQueryWrapper<LoginLog>()
@@ -140,22 +139,26 @@ public class AuthAppServiceImpl implements AuthAppService {
                 .last("limit " + safeLimit));
     }
 
+    /**
+     * 登录失败处理：失败计数 + 过期时间 + 阈值锁定 + 失败日志。
+     */
     private void onLoginFail(String username, String ip) {
         String failKey = FAIL_KEY_PREFIX + username;
-        Long count = stringRedisTemplate.opsForValue().increment(failKey);
-        stringRedisTemplate.expire(failKey, Duration.ofMinutes(10));
-
+        Long count = redisTemplate.opsForValue().increment(failKey);
+        redisTemplate.expire(failKey, Duration.ofMinutes(10));
         if (count != null && count >= 5) {
-            stringRedisTemplate.opsForValue().set(LOCK_KEY_PREFIX + username, "1", Duration.ofMinutes(5));
+            redisTemplate.opsForValue().set(LOCK_KEY_PREFIX + username, "1", Duration.ofMinutes(5));
         }
-
-        writeLoginLog(username, ip, 0, "登录失败");
+        writeLoginLog(username, ip, 0, "fail");
     }
 
+    /**
+     * 落库登录日志。
+     */
     private void writeLoginLog(String username, String ip, int success, String message) {
         LoginLog log = new LoginLog();
         log.setUsername(username);
-        log.setIp(StringUtils.hasText(ip) ? ip : "unknown");
+        log.setIp(ip);
         log.setSuccess(success);
         log.setMessage(message);
         log.setCreatedAt(LocalDateTime.now());

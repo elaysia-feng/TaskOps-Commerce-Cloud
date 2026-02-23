@@ -13,6 +13,10 @@ import java.util.Date;
 import java.util.List;
 
 @Component
+/**
+ * 文件说明： JwtTokenProvider.
+ * 组件职责： 项目中的通用组件。
+ */
 public class JwtTokenProvider {
 
     @Value("${app.jwt.secret}")

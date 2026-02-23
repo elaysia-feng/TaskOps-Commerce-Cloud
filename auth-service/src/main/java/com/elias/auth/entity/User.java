@@ -9,6 +9,10 @@ import java.time.LocalDateTime;
 
 @Data
 @TableName("sys_user")
+/**
+ * 文件说明： User.
+ * 组件职责： 项目中的通用组件。
+ */
 public class User {
     @TableId(type = IdType.AUTO)
     private Long id;

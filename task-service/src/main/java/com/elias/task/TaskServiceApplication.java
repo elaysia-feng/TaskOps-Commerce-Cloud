@@ -12,6 +12,10 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableDiscoveryClient
 @MapperScan("com.elias.task.mapper")
 @SpringBootApplication(scanBasePackages = {"com.elias.task", "com.elias.common"})
+/**
+ * 文件说明： TaskServiceApplication.
+ * 组件职责： 项目中的通用组件。
+ */
 public class TaskServiceApplication {
     public static void main(String[] args) {
         SpringApplication.run(TaskServiceApplication.class, args);

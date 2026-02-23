@@ -14,6 +14,10 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/internal/auth")
+/**
+ * 文件说明： AuthInternalController.
+ * 组件职责： 项目中的通用组件。
+ */
 public class AuthInternalController {
 
     private final AuthAppService authAppService;

@@ -9,6 +9,10 @@ import java.time.LocalDateTime;
 
 @Data
 @TableName("internship_task")
+/**
+ * 文件说明： InternshipTask.
+ * 组件职责： 项目中的通用组件。
+ */
 public class InternshipTask {
     @TableId(type = IdType.AUTO)
     private Long id;

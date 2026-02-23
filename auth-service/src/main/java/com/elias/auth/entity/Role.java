@@ -7,6 +7,10 @@ import lombok.Data;
 
 @Data
 @TableName("sys_role")
+/**
+ * 文件说明： Role.
+ * 组件职责： 项目中的通用组件。
+ */
 public class Role {
     @TableId(type = IdType.AUTO)
     private Long id;

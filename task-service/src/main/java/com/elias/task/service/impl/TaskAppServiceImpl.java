@@ -24,6 +24,13 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
+/**
+ * 文件说明：任务服务业务实现。
+ * 组件职责：
+ * 1) 创建、查询、详情、热榜等任务核心能力。
+ * 2) 调用 auth-service 校验任务归属用户。
+ * 3) 基于 Redis ZSet 维护任务热度榜。
+ */
 public class TaskAppServiceImpl implements TaskAppService {
 
     private static final String HOT_KEY = "task:hot:zset";
@@ -39,6 +46,11 @@ public class TaskAppServiceImpl implements TaskAppService {
     }
 
     @Override
+    /**
+     * 创建任务：
+     * 1) 通过 Feign 调 auth-service 校验 owner；
+     * 2) 组装任务默认字段并写库。
+     */
     public Long create(CreateTaskRequest request, Long ownerId) {
         ApiResponse<UserInfoDTO> userInfoResp = authClient.userInfo(ownerId);
         if (userInfoResp == null || userInfoResp.getData() == null) {
@@ -61,6 +73,9 @@ public class TaskAppServiceImpl implements TaskAppService {
     }
 
     @Override
+    /**
+     * 条件分页检索任务，支持关键字、状态、优先级区间。
+     */
     public IPage<InternshipTask> search(TaskQueryRequest request) {
         Page<InternshipTask> page = new Page<>(Math.max(1, request.getPage()), Math.max(1, Math.min(50, request.getSize())));
         LambdaQueryWrapper<InternshipTask> wrapper = new LambdaQueryWrapper<>();
@@ -85,6 +100,9 @@ public class TaskAppServiceImpl implements TaskAppService {
     }
 
     @Override
+    /**
+     * 查询任务详情，并顺带更新进度与热度分。
+     */
     public InternshipTask detail(Long id) {
         InternshipTask task = taskMapper.selectById(id);
         if (task == null) {
@@ -98,6 +116,11 @@ public class TaskAppServiceImpl implements TaskAppService {
     }
 
     @Override
+    /**
+     * 获取热榜 Top10：
+     * 1) 先读 Redis；
+     * 2) 缓存为空则触发重建。
+     */
     public List<InternshipTask> hot() {
         Set<String> ids = redisTemplate.opsForZSet().reverseRange(HOT_KEY, 0, 9);
         if (ids == null || ids.isEmpty()) {
@@ -111,6 +134,9 @@ public class TaskAppServiceImpl implements TaskAppService {
     }
 
     @Scheduled(cron = "0 */5 * * * ?")
+    /**
+     * 定时重建热榜缓存，降低热榜查询压力。
+     */
     public void rebuildHot() {
         List<InternshipTask> list = taskMapper.selectList(new LambdaQueryWrapper<InternshipTask>()
                 .orderByDesc(InternshipTask::getUpdatedAt)
@@ -121,11 +147,17 @@ public class TaskAppServiceImpl implements TaskAppService {
         }
     }
 
+    /**
+     * 计算任务质量分，用于热榜打分。
+     */
     private int calculateQuality(String title, String desc) {
         int score = 40 + Math.min(title.length(), 40) / 2 + Math.min(desc.length(), 1000) / 50;
         return Math.min(100, score);
     }
 
+    /**
+     * 计算任务热度分。
+     */
     private double hotScore(InternshipTask task) {
         return task.getQualityScore() + task.getProgress() * 0.5 + task.getCommentCount() * 2 + (6 - task.getPriority()) * 3;
     }
