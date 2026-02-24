@@ -12,9 +12,12 @@ import com.elias.task.dto.UserInfoDTO;
 import com.elias.task.entity.InternshipTask;
 import com.elias.task.mapper.InternshipTaskMapper;
 import com.elias.task.service.TaskAppService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
@@ -24,6 +27,9 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
+@Transactional
+@Slf4j
+@RequiredArgsConstructor
 /**
  * 文件说明：任务服务业务实现。
  * 组件职责：
@@ -38,12 +44,6 @@ public class TaskAppServiceImpl implements TaskAppService {
     private final InternshipTaskMapper taskMapper;
     private final StringRedisTemplate redisTemplate;
     private final AuthClient authClient;
-
-    public TaskAppServiceImpl(InternshipTaskMapper taskMapper, StringRedisTemplate redisTemplate, AuthClient authClient) {
-        this.taskMapper = taskMapper;
-        this.redisTemplate = redisTemplate;
-        this.authClient = authClient;
-    }
 
     @Override
     /**

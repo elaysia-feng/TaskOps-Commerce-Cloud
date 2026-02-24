@@ -1,17 +1,19 @@
 package com.elias.auth.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
 import javax.validation.constraints.NotBlank;
 
 @Data
-/**
- * 文件说明： LoginRequest.
- * 组件职责： 项目中的通用组件。
- */
+@Schema(name = "LoginRequest", description = "登录请求")
 public class LoginRequest {
+
     @NotBlank
+    @Schema(description = "用户名", example = "seele")
     private String username;
+
     @NotBlank
+    @Schema(description = "密码", example = "123456")
     private String password;
 }

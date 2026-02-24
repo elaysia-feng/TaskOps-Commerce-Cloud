@@ -10,7 +10,37 @@ import javax.servlet.http.HttpServletRequest;
 
 public final class UserContext {
 
+    private static final ThreadLocal<Long> USER_ID_HOLDER = new ThreadLocal<>();
+    private static final ThreadLocal<String> USERNAME_HOLDER = new ThreadLocal<>();
+    private static final ThreadLocal<String> ROLES_HOLDER = new ThreadLocal<>();
+
     private UserContext() {
+    }
+
+    public static void set(Long userId, String username, String roles) {
+        USER_ID_HOLDER.set(userId);
+        USERNAME_HOLDER.set(username);
+        ROLES_HOLDER.set(roles);
+    }
+
+    public static void clear() {
+        USER_ID_HOLDER.remove();
+        USERNAME_HOLDER.remove();
+        ROLES_HOLDER.remove();
+    }
+
+    public static Long userId() {
+        return USER_ID_HOLDER.get();
+    }
+
+    public static String username() {
+        String username = USERNAME_HOLDER.get();
+        return username == null ? "anonymous" : username;
+    }
+
+    public static String roles() {
+        String roles = ROLES_HOLDER.get();
+        return roles == null ? "" : roles;
     }
 
     public static Long userId(HttpServletRequest request) {

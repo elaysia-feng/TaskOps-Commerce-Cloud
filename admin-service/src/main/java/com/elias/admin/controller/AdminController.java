@@ -6,21 +6,20 @@ import com.elias.common.ApiResponse;
 import com.elias.common.context.UserContext;
 import com.elias.common.exception.BizException;
 import com.elias.common.exception.ErrorCode;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import javax.servlet.http.HttpServletRequest;
 import java.util.HashMap;
 import java.util.Map;
 
 @RestController
 @RequestMapping("/api/admin")
-/**
- * 文件说明：管理端接口控制器。
- * 组件职责：聚合 auth-service 与 task-service 数据，提供管理看板。
- */
+@Tag(name = "管理接口", description = "管理端聚合查询接口")
 public class AdminController {
 
     private final AuthClient authClient;
@@ -32,12 +31,10 @@ public class AdminController {
     }
 
     @GetMapping("/dashboard")
-    /**
-     * 管理看板接口：需要 ADMIN 角色。
-     */
-    public ApiResponse<Map<String, Object>> dashboard(@RequestParam(defaultValue = "30") int loginLogLimit,
-                                                      HttpServletRequest request) {
-        String roles = UserContext.roles(request);
+    @Operation(summary = "管理看板", description = "需要 ADMIN 角色，聚合登录日志与热榜任务")
+    public ApiResponse<Map<String, Object>> dashboard(
+            @Parameter(description = "登录日志条数，默认30") @RequestParam(defaultValue = "30") int loginLogLimit) {
+        String roles = UserContext.roles();
         if (!roles.contains("ADMIN")) {
             throw new BizException(ErrorCode.FORBIDDEN_ADMIN_ROLE_REQUIRED);
         }
