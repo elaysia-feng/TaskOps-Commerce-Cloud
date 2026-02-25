@@ -29,18 +29,22 @@ public class TaskController {
     }
 
     @PostMapping
-    @Operation(summary = "创建任务", description = "需要登录态，自动绑定当前用户为 owner")
+    @Operation(summary = "创建任务", description = "需要登录态，自动绑定当前用户为owner")
     public ApiResponse<Long> create(@Valid @RequestBody CreateTaskRequest request) {
+        // 1) 读取当前登录用户ID（由网关透传后写入UserContext）
         Long uid = UserContext.userId();
+        // 1.1) 用户未登录：直接中断请求
         if (uid == null) {
             throw new BizException(ErrorCode.NOT_LOGGED_IN);
         }
+        // 1.2) 用户已登录：交给服务层创建任务并返回新任务ID
         return ApiResponse.ok(taskAppService.create(request, uid));
     }
 
     @PostMapping("/search")
     @Operation(summary = "分页搜索任务")
     public ApiResponse<IPage<InternshipTask>> search(@RequestBody TaskQueryRequest request) {
+        // 2) 将分页与筛选条件透传到服务层，返回标准分页结构
         return ApiResponse.ok(taskAppService.search(request));
     }
 
@@ -48,12 +52,14 @@ public class TaskController {
     @Operation(summary = "查询任务详情")
     public ApiResponse<InternshipTask> detail(
             @Parameter(description = "任务ID", required = true) @PathVariable("id") Long id) {
+        // 3) 查询详情（服务层会执行进度更新、热度更新、缓存失效）
         return ApiResponse.ok(taskAppService.detail(id));
     }
 
     @GetMapping("/hot")
     @Operation(summary = "查询任务热榜", description = "返回热度 Top10")
     public ApiResponse<List<InternshipTask>> hot() {
+        // 4) 查询热榜（优先读Redis，空时触发重建）
         return ApiResponse.ok(taskAppService.hot());
     }
 }
