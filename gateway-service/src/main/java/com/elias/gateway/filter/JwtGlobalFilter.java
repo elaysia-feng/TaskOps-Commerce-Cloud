@@ -82,6 +82,7 @@ public class JwtGlobalFilter implements GlobalFilter, Ordered {
         List<String> whiteList = List.of(
                 "/api/auth/**",
                 "/api/tasks/hot",
+                "/api/pay/callback/mock",
                 "/actuator/**"
         );
         return whiteList.stream().anyMatch(pattern -> pathMatcher.match(pattern, path));

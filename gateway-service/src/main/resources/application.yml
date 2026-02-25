@@ -17,6 +17,14 @@ spring:
           uri: lb://admin-service
           predicates:
             - Path=/api/admin/**
+        - id: order-service
+          uri: lb://order-service
+          predicates:
+            - Path=/api/orders/**
+        - id: pay-service
+          uri: lb://pay-service
+          predicates:
+            - Path=/api/pay/**
 
 app:
   jwt:

@@ -21,11 +21,16 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import javax.annotation.Resource;
 import java.time.LocalDateTime;
 import java.util.Collections;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 @Service
@@ -43,6 +48,9 @@ public class TaskAppServiceImpl implements TaskAppService {
     private final StringRedisTemplate redisTemplate;
     private final AuthClient authClient;
     private final CacheClient cacheClient;
+    // 0) 注入任务查询线程池：用于hot()并行回填详情
+    @Resource(name = "taskQueryExecutor")
+    private Executor taskQueryExecutor;
 
     @Override
     public Long create(CreateTaskRequest request, Long ownerId) {
@@ -149,10 +157,21 @@ public class TaskAppServiceImpl implements TaskAppService {
             return Collections.emptyList();
         }
 
-        // 7.3) 批量回填任务详情（带缓存防护：穿透/击穿/雪崩）
-        return ids.stream()
-                .map(Long::valueOf)
-                .map(this::queryTaskWithCacheProtection)
+        // 7.3) 使用线程池并行回填任务详情（带缓存防护：穿透/击穿/雪崩）
+        List<CompletableFuture<InternshipTask>> futures = new ArrayList<>();
+        for (String id : ids) {
+            final Long taskId = Long.valueOf(id);
+            futures.add(CompletableFuture.supplyAsync(new Supplier<InternshipTask>() {
+                @Override
+                public InternshipTask get() {
+                    return queryTaskWithCacheProtection(taskId);
+                }
+            }, taskQueryExecutor));
+        }
+
+        // 7.4) 汇总并行结果，过滤空值后返回
+        return futures.stream()
+                .map(CompletableFuture::join)
                 .filter(item -> item != null)
                 .collect(Collectors.toList());
     }

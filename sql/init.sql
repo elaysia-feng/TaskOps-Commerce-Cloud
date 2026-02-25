@@ -60,4 +60,60 @@ CREATE TABLE IF NOT EXISTS operation_log (
     created_at DATETIME NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS t_stock (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    sku_code VARCHAR(64) NOT NULL UNIQUE,
+    stock INT NOT NULL DEFAULT 0,
+    updated_at DATETIME NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS t_order (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    order_no VARCHAR(64) NOT NULL UNIQUE,
+    user_id BIGINT NOT NULL,
+    sku_code VARCHAR(64) NOT NULL,
+    quantity INT NOT NULL,
+    amount DECIMAL(10,2) NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    INDEX idx_order_user(user_id),
+    INDEX idx_order_status(status)
+);
+
+CREATE TABLE IF NOT EXISTS t_payment (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    pay_no VARCHAR(64) NOT NULL UNIQUE,
+    order_no VARCHAR(64) NOT NULL UNIQUE,
+    amount DECIMAL(10,2) NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS t_order_outbox (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    message_id VARCHAR(64) NOT NULL UNIQUE,
+    routing_key VARCHAR(64) NOT NULL,
+    payload TEXT NOT NULL,
+    status TINYINT NOT NULL DEFAULT 0,
+    retry_count INT NOT NULL DEFAULT 0,
+    next_retry_time DATETIME NOT NULL,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    INDEX idx_outbox_status_time(status, next_retry_time)
+);
+
+CREATE TABLE IF NOT EXISTS t_message_consume_log (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    message_id VARCHAR(64) NOT NULL,
+    biz_type VARCHAR(64) NOT NULL,
+    created_at DATETIME NOT NULL,
+    UNIQUE KEY uk_message_biz (message_id, biz_type)
+);
+
+INSERT INTO t_stock (sku_code, stock, updated_at)
+VALUES ('SKU_MEAL_001', 100, NOW()),
+       ('SKU_MEAL_002', 80, NOW())
+ON DUPLICATE KEY UPDATE stock = VALUES(stock), updated_at = VALUES(updated_at);
 

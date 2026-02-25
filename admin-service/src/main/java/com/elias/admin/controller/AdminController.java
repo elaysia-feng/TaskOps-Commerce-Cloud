@@ -1,6 +1,8 @@
 package com.elias.admin.controller;
 
 import com.elias.admin.client.AuthClient;
+import com.elias.admin.client.OrderClient;
+import com.elias.admin.client.PayClient;
 import com.elias.admin.client.TaskClient;
 import com.elias.common.ApiResponse;
 import com.elias.common.context.UserContext;
@@ -24,14 +26,18 @@ public class AdminController {
 
     private final AuthClient authClient;
     private final TaskClient taskClient;
+    private final OrderClient orderClient;
+    private final PayClient payClient;
 
-    public AdminController(AuthClient authClient, TaskClient taskClient) {
+    public AdminController(AuthClient authClient, TaskClient taskClient, OrderClient orderClient, PayClient payClient) {
         this.authClient = authClient;
         this.taskClient = taskClient;
+        this.orderClient = orderClient;
+        this.payClient = payClient;
     }
 
     @GetMapping("/dashboard")
-    @Operation(summary = "管理看板", description = "需要 ADMIN 角色，聚合登录日志与热榜任务")
+    @Operation(summary = "管理看板", description = "需要ADMIN角色，聚合登录日志、热榜任务、订单与支付摘要")
     public ApiResponse<Map<String, Object>> dashboard(
             @Parameter(description = "登录日志条数，默认30") @RequestParam(defaultValue = "30") int loginLogLimit) {
         String roles = UserContext.roles();
@@ -41,6 +47,8 @@ public class AdminController {
         Map<String, Object> result = new HashMap<>();
         result.put("loginLogs", authClient.loginLogs(loginLogLimit).getData());
         result.put("hotTasks", taskClient.hotTasks().getData());
+        result.put("orderSummary", orderClient.summary().getData());
+        result.put("paySummary", payClient.summary().getData());
         return ApiResponse.ok(result);
     }
 }

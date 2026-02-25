@@ -15,6 +15,8 @@
         <module>task-service</module>
         <module>admin-service</module>
         <module>gateway-service</module>
+        <module>order-service</module>
+        <module>pay-service</module>
     </modules>
 
     <properties>
