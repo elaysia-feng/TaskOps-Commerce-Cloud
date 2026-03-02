@@ -1,19 +1,30 @@
-﻿<template>
+<template>
   <section class="card">
     <h1>控制台</h1>
-    <p class="muted">登录后进入业务工作台，可在左侧切换模块。</p>
+    <p class="muted">登录后可直接在左侧切换模块进行联调与压测。</p>
+
     <div class="kpi-grid">
       <article>
-        <h3>鉴权模式</h3>
+        <h3>鉴权</h3>
         <p>Gateway JWT</p>
       </article>
       <article>
-        <h3>当前角色</h3>
+        <h3>角色</h3>
         <p>{{ roleText }}</p>
       </article>
       <article>
-        <h3>建议操作</h3>
-        <p>前往任务列表或创建新任务</p>
+        <h3>链路</h3>
+        <p>Order -> Pay -> Order</p>
+      </article>
+    </div>
+
+    <div class="task-grid mt12">
+      <article class="task-card">
+        <header>
+          <h3>今日建议</h3>
+          <span class="tag">Sentinel</span>
+        </header>
+        <p>优先验证登录、下单、支付接口的限流与熔断策略。</p>
       </article>
     </div>
   </section>

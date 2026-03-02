@@ -1,2 +1,9 @@
 server:
   port: 8083
+
+spring:
+  cloud:
+    sentinel:
+      transport:
+        dashboard: ${TASKOPS_SENTINEL_DASHBOARD:localhost:8858}
+        port: ${TASKOPS_SENTINEL_CLIENT_PORT:8721}

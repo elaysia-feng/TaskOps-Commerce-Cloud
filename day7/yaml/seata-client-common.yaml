@@ -1,0 +1,32 @@
+# Nacos 公共配置示例（Data ID 可命名为: seata.yaml）
+# 仅给参与分布式事务的服务引用（如 order-service、pay-service）
+
+seata:
+  enabled: true
+  application-id: ${spring.application.name}
+  tx-service-group: taskops_tx_group
+  enable-auto-data-source-proxy: true
+  data-source-proxy-mode: AT
+  service:
+    vgroup-mapping:
+      taskops_tx_group: default
+    grouplist:
+      default: ${SEATA_SERVER_ADDR:${TASKOPS_MW_HOST:192.168.88.100}:8091}
+  registry:
+    type: nacos
+    nacos:
+      application: seata-server
+      server-addr: ${NACOS_ADDR:${TASKOPS_MW_HOST:192.168.88.100}:8848}
+      namespace: ${NACOS_NAMESPACE:public}
+      group: SEATA_GROUP
+      username: ${NACOS_USERNAME:nacos}
+      password: ${NACOS_PASSWORD:nacos}
+  config:
+    type: nacos
+    nacos:
+      server-addr: ${NACOS_ADDR:${TASKOPS_MW_HOST:192.168.88.100}:8848}
+      namespace: ${NACOS_NAMESPACE:public}
+      group: SEATA_GROUP
+      username: ${NACOS_USERNAME:nacos}
+      password: ${NACOS_PASSWORD:nacos}
+

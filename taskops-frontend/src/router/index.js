@@ -6,6 +6,7 @@ import RegisterView from "../views/RegisterView.vue";
 import TaskListView from "../views/TaskListView.vue";
 import CreateTaskView from "../views/CreateTaskView.vue";
 import DashboardView from "../views/DashboardView.vue";
+import OrderPayView from "../views/OrderPayView.vue";
 import { getToken } from "../utils/auth";
 
 const routes = [
@@ -17,7 +18,8 @@ const routes = [
       { path: "", redirect: "/dashboard" },
       { path: "dashboard", component: DashboardView },
       { path: "tasks", component: TaskListView },
-      { path: "tasks/create", component: CreateTaskView }
+      { path: "tasks/create", component: CreateTaskView },
+      { path: "orders", component: OrderPayView }
     ]
   },
   {

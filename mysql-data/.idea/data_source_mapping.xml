@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="DataSourcePerFileMappings">
+    <file url="file://$APPLICATION_CONFIG_DIR$/consoles/db/35a344eb-9b6c-43d9-8473-355f527def88/console.sql" value="35a344eb-9b6c-43d9-8473-355f527def88" />
+    <file url="file://$APPLICATION_CONFIG_DIR$/consoles/db/4e33529a-51fb-40d7-afb7-e81ea68d87b5/console.sql" value="4e33529a-51fb-40d7-afb7-e81ea68d87b5" />
+    <file url="file://$PROJECT_DIR$/../day7/seata-init.sql" value="35a344eb-9b6c-43d9-8473-355f527def88" />
+  </component>
+</project>

@@ -42,10 +42,3 @@ services:
     container_name: taskops-redis
     ports:
       - "6379:6379"
-
-  rabbitmq:
-    image: rabbitmq:3.13-management
-    container_name: taskops-rabbitmq
-    ports:
-      - "5672:5672"
-      - "15672:15672"

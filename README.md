@@ -2,7 +2,7 @@
 
 当前推荐开发模式：
 
-1. 中间件在 Docker 运行（Nacos/MySQL/Redis/RabbitMQ）
+1. 中间件在 Docker 运行（Nacos/MySQL/Redis）
 2. Java 微服务在本地运行（auth/task/admin/order/pay/gateway）
 3. Nginx 可选，用于联调或演示
 

@@ -15,7 +15,7 @@ spring:
   cloud:
     sentinel:
       transport:
-        dashboard: ${TASKOPS_SENTINEL_DASHBOARD:${TASKOPS_MW_HOST:192.168.88.100}:8858}
+        dashboard: ${TASKOPS_SENTINEL_DASHBOARD:localhost:8858}
         port: ${TASKOPS_SENTINEL_CLIENT_PORT:8719}
 
 mybatis-plus:

@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <section class="card auth-card">
     <h1>注册</h1>
     <form class="form-grid" @submit.prevent="handleRegister">
@@ -21,11 +21,13 @@
       <p class="error" v-if="errorText">{{ errorText }}</p>
       <p class="success" v-if="successText">{{ successText }}</p>
     </form>
+    <p class="muted mt12">已有账号？<RouterLink to="/login">去登录</RouterLink></p>
   </section>
 </template>
 
 <script setup>
 import { reactive, ref } from "vue";
+import { RouterLink } from "vue-router";
 import { register } from "../api/auth";
 
 const loading = ref(false);

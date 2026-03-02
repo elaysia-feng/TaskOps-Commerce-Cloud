@@ -3,6 +3,10 @@ server:
 
 spring:
   cloud:
+    sentinel:
+      transport:
+        dashboard: ${TASKOPS_SENTINEL_DASHBOARD:localhost:8858}
+        port: ${TASKOPS_SENTINEL_CLIENT_PORT:8722}
     gateway:
       routes:
         - id: auth-service

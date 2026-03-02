@@ -1,12 +1,13 @@
-﻿<template>
+<template>
   <div class="auth-layout">
     <aside class="auth-side">
-      <h1>TaskOps Cloud</h1>
-      <p>企业任务协同平台</p>
+      <p class="hero-tag">TaskOps Platform</p>
+      <h1>Build Reliable Microservice Workflows</h1>
+      <p>面向任务、订单、支付链路的一体化联调工作台。</p>
       <ul>
-        <li>统一网关鉴权</li>
-        <li>微服务拆分</li>
-        <li>可观测与权限控制</li>
+        <li>Gateway + JWT 统一鉴权</li>
+        <li>Sentinel 流控与降级</li>
+        <li>多服务链路快速验证</li>
       </ul>
     </aside>
     <main class="auth-main">

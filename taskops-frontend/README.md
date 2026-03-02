@@ -26,6 +26,7 @@ npm run dev
 - 注册：`/register`
 - 任务列表/搜索：`/tasks`
 - 创建任务（需要登录）：`/tasks/create`
+- 下单与支付联调：`/orders`
 
 ## 目录
 

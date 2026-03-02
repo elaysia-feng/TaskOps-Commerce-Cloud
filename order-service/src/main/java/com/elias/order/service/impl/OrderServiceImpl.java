@@ -2,18 +2,13 @@ package com.elias.order.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.elias.common.exception.BizException;
-import com.elias.common.mq.MqConstants;
-import com.elias.common.mq.event.OrderCreatedEvent;
 import com.elias.order.dto.CreateOrderRequest;
 import com.elias.order.dto.CreateOrderResponse;
 import com.elias.order.entity.Order;
-import com.elias.order.entity.OrderOutbox;
 import com.elias.order.mapper.OrderMapper;
-import com.elias.order.mapper.OrderOutboxMapper;
 import com.elias.order.mapper.StockMapper;
 import com.elias.order.service.OrderService;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import io.seata.spring.annotation.GlobalTransactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,11 +24,9 @@ public class OrderServiceImpl implements OrderService {
 
     private final OrderMapper orderMapper;
     private final StockMapper stockMapper;
-    private final OrderOutboxMapper outboxMapper;
-    private final ObjectMapper objectMapper;
 
     @Override
-    @Transactional
+    @GlobalTransactional
     public CreateOrderResponse createOrder(CreateOrderRequest request, Long userId) {
         int updated = stockMapper.deductStock(request.getSkuCode(), request.getQuantity());
         if (updated == 0) {
@@ -52,19 +45,6 @@ public class OrderServiceImpl implements OrderService {
         order.setUpdatedAt(LocalDateTime.now());
         orderMapper.insert(order);
 
-        String msgId = UUID.randomUUID().toString();
-        OrderCreatedEvent event = new OrderCreatedEvent(msgId, orderNo, userId, request.getAmount());
-        OrderOutbox outbox = new OrderOutbox();
-        outbox.setMessageId(msgId);
-        outbox.setRoutingKey(MqConstants.RK_ORDER_CREATED);
-        outbox.setPayload(toJson(event));
-        outbox.setStatus(0);
-        outbox.setRetryCount(0);
-        outbox.setNextRetryTime(LocalDateTime.now());
-        outbox.setCreatedAt(LocalDateTime.now());
-        outbox.setUpdatedAt(LocalDateTime.now());
-        outboxMapper.insert(outbox);
-
         return new CreateOrderResponse(orderNo, order.getStatus());
     }
 
@@ -74,7 +54,7 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
-    @Transactional
+    @GlobalTransactional
     public void cancel(String orderNo, Long userId) {
         Order order = getByOrderNo(orderNo);
         if (order == null || !order.getUserId().equals(userId)) {
@@ -90,7 +70,7 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
-    @Transactional
+    @GlobalTransactional
     public void markPaid(String orderNo) {
         Order order = getByOrderNo(orderNo);
         if (order == null) {
@@ -112,13 +92,5 @@ public class OrderServiceImpl implements OrderService {
         result.put("paid", orderMapper.selectCount(new LambdaQueryWrapper<Order>().eq(Order::getStatus, "PAID")));
         result.put("cancelled", orderMapper.selectCount(new LambdaQueryWrapper<Order>().eq(Order::getStatus, "CANCELLED")));
         return result;
-    }
-
-    private String toJson(Object value) {
-        try {
-            return objectMapper.writeValueAsString(value);
-        } catch (JsonProcessingException e) {
-            throw new IllegalStateException("serialize event failed", e);
-        }
     }
 }

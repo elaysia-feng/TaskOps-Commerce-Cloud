@@ -10,6 +10,11 @@ spring:
   redis:
     host: ${TASKOPS_REDIS_HOST:${TASKOPS_MW_HOST:192.168.88.100}}
     port: ${TASKOPS_REDIS_PORT:6380}
+  cloud:
+    sentinel:
+      transport:
+        dashboard: ${TASKOPS_SENTINEL_DASHBOARD:localhost:8858}
+        port: ${TASKOPS_SENTINEL_CLIENT_PORT:8720}
 
 mybatis-plus:
   configuration:

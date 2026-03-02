@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <section class="card auth-card">
     <h2>账号登录</h2>
 
@@ -36,12 +36,14 @@
 
       <p class="error" v-if="errorText">{{ errorText }}</p>
     </form>
+
+    <p class="muted mt12">没有账号？<RouterLink to="/register">立即注册</RouterLink></p>
   </section>
 </template>
 
 <script setup>
 import { reactive, ref } from "vue";
-import { useRouter } from "vue-router";
+import { RouterLink, useRouter } from "vue-router";
 import { login } from "../api/auth";
 import { setAuth } from "../utils/auth";
 

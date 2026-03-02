@@ -55,4 +55,10 @@ public class OrderController {
     public ApiResponse<Map<String, Long>> summary() {
         return ApiResponse.ok(orderService.summary());
     }
+
+    @PostMapping("/internal/{orderNo}/mark-paid")
+    public ApiResponse<Void> markPaid(@PathVariable String orderNo) {
+        orderService.markPaid(orderNo);
+        return ApiResponse.ok();
+    }
 }
