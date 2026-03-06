@@ -13,6 +13,9 @@ spring:
           - data-id: shared-seata.yaml
             group: ${NACOS_GROUP:DEFAULT_GROUP}
             refresh: true
+          - data-id: rabbitmq.yaml
+            group: ${NACOS_GROUP:DEFAULT_GROUP}
+            refresh: true
   config:
     import:
       - optional:nacos:${spring.application.name}.yaml

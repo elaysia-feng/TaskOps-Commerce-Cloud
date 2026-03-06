@@ -2,11 +2,13 @@ package com.elias.order.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.elias.common.exception.BizException;
+import com.elias.common.mq.event.OrderCreatedEvent;
 import com.elias.order.dto.CreateOrderRequest;
 import com.elias.order.dto.CreateOrderResponse;
 import com.elias.order.entity.Order;
 import com.elias.order.mapper.OrderMapper;
 import com.elias.order.mapper.StockMapper;
+import com.elias.order.mq.producer.OrderEventProducer;
 import com.elias.order.service.OrderService;
 import io.seata.spring.annotation.GlobalTransactional;
 import lombok.RequiredArgsConstructor;
@@ -24,9 +26,10 @@ public class OrderServiceImpl implements OrderService {
 
     private final OrderMapper orderMapper;
     private final StockMapper stockMapper;
+    private final OrderEventProducer orderEventProducer;
 
     @Override
-    @GlobalTransactional
+    @Transactional(rollbackFor = Exception.class)
     public CreateOrderResponse createOrder(CreateOrderRequest request, Long userId) {
         int updated = stockMapper.deductStock(request.getSkuCode(), request.getQuantity());
         if (updated == 0) {
@@ -44,6 +47,12 @@ public class OrderServiceImpl implements OrderService {
         order.setCreatedAt(LocalDateTime.now());
         order.setUpdatedAt(LocalDateTime.now());
         orderMapper.insert(order);
+        orderEventProducer.sendOrderCreated(new OrderCreatedEvent(
+                UUID.randomUUID().toString(),
+                orderNo,
+                userId,
+                order.getAmount()
+        ));
 
         return new CreateOrderResponse(orderNo, order.getStatus());
     }
@@ -54,7 +63,7 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
-    @GlobalTransactional
+    @Transactional(rollbackFor = Exception.class)
     public void cancel(String orderNo, Long userId) {
         Order order = getByOrderNo(orderNo);
         if (order == null || !order.getUserId().equals(userId)) {
@@ -70,7 +79,7 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
-    @GlobalTransactional
+    @Transactional(rollbackFor = Exception.class)
     public void markPaid(String orderNo) {
         Order order = getByOrderNo(orderNo);
         if (order == null) {

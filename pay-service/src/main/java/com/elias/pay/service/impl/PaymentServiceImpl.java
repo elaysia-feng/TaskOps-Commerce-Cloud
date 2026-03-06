@@ -42,9 +42,9 @@ public class PaymentServiceImpl implements PaymentService {
      *
      * 事务含义：
      * - 支付记录插入 + 消费日志插入在同一事务中提交/回滚，保证一致性
-     */
+    */
     @Override
-    @GlobalTransactional
+    @Transactional(rollbackFor = Exception.class)
     public void createPaymentIfAbsent(String messageId, String orderNo, BigDecimal amount) {
 
         // 1) 先查消费日志：如果该 messageId 已处理过（ORDER_CREATED），直接返回（幂等）
@@ -97,9 +97,9 @@ public class PaymentServiceImpl implements PaymentService {
      * - 当前方法在一个本地事务中，但 orderClient.markPaid 是远程调用，不受本地事务控制
      * - 可能出现：本地已提交 SUCCESS，但远程调用失败（或反过来）
      * - 生产中通常用 Outbox/消息最终一致性补偿来处理
-     */
+    */
     @Override
-    @GlobalTransactional
+    @GlobalTransactional(rollbackFor = Exception.class)
     public Payment mockPaySuccess(String orderNo) {
 
         // 1) 查支付单，不存在则抛业务异常
