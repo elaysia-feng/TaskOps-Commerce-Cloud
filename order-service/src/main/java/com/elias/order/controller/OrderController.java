@@ -13,6 +13,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import javax.validation.Valid;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -30,6 +31,15 @@ public class OrderController {
             throw new BizException(ErrorCode.NOT_LOGGED_IN);
         }
         return ApiResponse.ok(orderService.createOrder(request, uid));
+    }
+
+    @GetMapping("/mine")
+    public ApiResponse<List<Order>> mine() {
+        Long uid = UserContext.userId();
+        if (uid == null) {
+            throw new BizException(ErrorCode.NOT_LOGGED_IN);
+        }
+        return ApiResponse.ok(orderService.listByUserId(uid));
     }
 
     @GetMapping("/{orderNo}")

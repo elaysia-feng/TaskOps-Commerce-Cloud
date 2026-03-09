@@ -1,5 +1,6 @@
 package com.elias.task.controller;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.elias.common.ApiResponse;
 import com.elias.common.context.UserContext;
@@ -8,6 +9,9 @@ import com.elias.common.exception.ErrorCode;
 import com.elias.task.dto.CreateTaskRequest;
 import com.elias.task.dto.TaskQueryRequest;
 import com.elias.task.entity.InternshipTask;
+import com.elias.task.mapper.InternshipTaskMapper;
+import com.elias.task.membership.MembershipLevel;
+import com.elias.task.membership.TaskQuotaService;
 import com.elias.task.service.TaskAppService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -15,51 +19,94 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.web.bind.annotation.*;
 
 import javax.validation.Valid;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/tasks")
-@Tag(name = "任务接口", description = "任务创建、检索、详情与热榜")
+@Tag(name = "Task API", description = "Task create/search/detail/hot and 简单会员配额演示")
 public class TaskController {
 
     private final TaskAppService taskAppService;
+    private final InternshipTaskMapper taskMapper;
+    private final TaskQuotaService taskQuotaService;
 
-    public TaskController(TaskAppService taskAppService) {
+    public TaskController(TaskAppService taskAppService,
+                          InternshipTaskMapper taskMapper,
+                          TaskQuotaService taskQuotaService) {
         this.taskAppService = taskAppService;
+        this.taskMapper = taskMapper;
+        this.taskQuotaService = taskQuotaService;
     }
 
     @PostMapping
-    @Operation(summary = "创建任务", description = "需要登录态，自动绑定当前用户为owner")
+    @Operation(summary = "Create task")
     public ApiResponse<Long> create(@Valid @RequestBody CreateTaskRequest request) {
-        // 1) 读取当前登录用户ID（由网关透传后写入UserContext）
-        Long uid = UserContext.userId();
-        // 1.1) 用户未登录：直接中断请求
-        if (uid == null) {
-            throw new BizException(ErrorCode.NOT_LOGGED_IN);
+        Long uid = requireLogin();
+
+        long used = usedTaskCount(uid);
+        int limit = taskQuotaService.maxTasks(uid);
+        if (used >= limit) {
+            throw new BizException(4104, "task limit reached, current limit=" + limit);
         }
-        // 1.2) 用户已登录：交给服务层创建任务并返回新任务ID
         return ApiResponse.ok(taskAppService.create(request, uid));
     }
 
+    @GetMapping("/membership/me")
+    @Operation(summary = "Get my membership quota")
+    public ApiResponse<Map<String, Object>> membership() {
+        Long uid = requireLogin();
+        MembershipLevel level = taskQuotaService.getLevel(uid);
+        long used = usedTaskCount(uid);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("userId", uid);
+        result.put("level", level.name());
+        result.put("maxTasks", level.maxTasks());
+        result.put("usedTasks", used);
+        result.put("remaining", Math.max(0, level.maxTasks() - used));
+        return ApiResponse.ok(result);
+    }
+
+    @PutMapping("/membership/me/{level}")
+    @Operation(summary = "Switch my membership level (demo only)")
+    public ApiResponse<Void> switchMembership(@PathVariable("level") String level) {
+        Long uid = requireLogin();
+        MembershipLevel membershipLevel = MembershipLevel.valueOf(level.toUpperCase());
+        taskQuotaService.setLevel(uid, membershipLevel);
+        return ApiResponse.ok(null);
+    }
+
     @PostMapping("/search")
-    @Operation(summary = "分页搜索任务")
+    @Operation(summary = "Search task page")
     public ApiResponse<IPage<InternshipTask>> search(@RequestBody TaskQueryRequest request) {
-        // 2) 将分页与筛选条件透传到服务层，返回标准分页结构
         return ApiResponse.ok(taskAppService.search(request));
     }
 
     @GetMapping("/{id}")
-    @Operation(summary = "查询任务详情")
+    @Operation(summary = "Task detail")
     public ApiResponse<InternshipTask> detail(
-            @Parameter(description = "任务ID", required = true) @PathVariable("id") Long id) {
-        // 3) 查询详情（服务层会执行进度更新、热度更新、缓存失效）
+            @Parameter(description = "task id", required = true) @PathVariable("id") Long id) {
         return ApiResponse.ok(taskAppService.detail(id));
     }
 
     @GetMapping("/hot")
-    @Operation(summary = "查询任务热榜", description = "返回热度 Top10")
+    @Operation(summary = "Task hot top10")
     public ApiResponse<List<InternshipTask>> hot() {
-        // 4) 查询热榜（优先读Redis，空时触发重建）
         return ApiResponse.ok(taskAppService.hot());
+    }
+
+    private Long requireLogin() {
+        Long uid = UserContext.userId();
+        if (uid == null) {
+            throw new BizException(ErrorCode.NOT_LOGGED_IN);
+        }
+        return uid;
+    }
+
+    private long usedTaskCount(Long uid) {
+        return taskMapper.selectCount(new LambdaQueryWrapper<InternshipTask>()
+                .eq(InternshipTask::getOwnerId, uid));
     }
 }

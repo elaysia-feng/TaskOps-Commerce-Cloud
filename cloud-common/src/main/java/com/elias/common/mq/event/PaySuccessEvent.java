@@ -13,5 +13,7 @@ public class PaySuccessEvent {
     private String messageId;
     private String orderNo;
     private String payNo;
+    private Long userId;
+    private String skuCode;
     private BigDecimal amount;
 }

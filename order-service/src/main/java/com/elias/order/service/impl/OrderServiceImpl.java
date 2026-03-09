@@ -15,14 +15,21 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 public class OrderServiceImpl implements OrderService {
+
+    private static final String SKU_MEMBER_VIP = "MEMBER_VIP";
+    private static final String SKU_MEMBER_SVIP = "MEMBER_SVIP";
+    private static final BigDecimal PRICE_MEMBER_VIP = new BigDecimal("19.90");
+    private static final BigDecimal PRICE_MEMBER_SVIP = new BigDecimal("39.90");
 
     private final OrderMapper orderMapper;
     private final StockMapper stockMapper;
@@ -31,9 +38,13 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public CreateOrderResponse createOrder(CreateOrderRequest request, Long userId) {
-        int updated = stockMapper.deductStock(request.getSkuCode(), request.getQuantity());
-        if (updated == 0) {
-            throw new BizException(4101, "stock not enough");
+        if (isMembershipSku(request.getSkuCode())) {
+            validateMembershipOrder(request);
+        } else {
+            int updated = stockMapper.deductStock(request.getSkuCode(), request.getQuantity());
+            if (updated == 0) {
+                throw new BizException(4101, "stock not enough");
+            }
         }
 
         String orderNo = "ORD" + System.currentTimeMillis() + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
@@ -63,6 +74,13 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
+    public List<Order> listByUserId(Long userId) {
+        return orderMapper.selectList(new LambdaQueryWrapper<Order>()
+                .eq(Order::getUserId, userId)
+                .orderByDesc(Order::getCreatedAt));
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public void cancel(String orderNo, Long userId) {
         Order order = getByOrderNo(orderNo);
@@ -75,7 +93,9 @@ public class OrderServiceImpl implements OrderService {
         order.setStatus("CANCELLED");
         order.setUpdatedAt(LocalDateTime.now());
         orderMapper.updateById(order);
-        stockMapper.restoreStock(order.getSkuCode(), order.getQuantity());
+        if (!isMembershipSku(order.getSkuCode())) {
+            stockMapper.restoreStock(order.getSkuCode(), order.getQuantity());
+        }
     }
 
     @Override
@@ -84,6 +104,9 @@ public class OrderServiceImpl implements OrderService {
         Order order = getByOrderNo(orderNo);
         if (order == null) {
             return;
+        }
+        if ("CANCELLED".equals(order.getStatus())) {
+            throw new BizException(4103, "cancelled order cannot be paid");
         }
         if ("PAID".equals(order.getStatus()) || "DONE".equals(order.getStatus())) {
             return;
@@ -101,5 +124,19 @@ public class OrderServiceImpl implements OrderService {
         result.put("paid", orderMapper.selectCount(new LambdaQueryWrapper<Order>().eq(Order::getStatus, "PAID")));
         result.put("cancelled", orderMapper.selectCount(new LambdaQueryWrapper<Order>().eq(Order::getStatus, "CANCELLED")));
         return result;
+    }
+
+    private boolean isMembershipSku(String skuCode) {
+        return SKU_MEMBER_VIP.equals(skuCode) || SKU_MEMBER_SVIP.equals(skuCode);
+    }
+
+    private void validateMembershipOrder(CreateOrderRequest request) {
+        if (request.getQuantity() == null || request.getQuantity() != 1) {
+            throw new BizException(4105, "membership order quantity must be 1");
+        }
+        BigDecimal expectedPrice = SKU_MEMBER_SVIP.equals(request.getSkuCode()) ? PRICE_MEMBER_SVIP : PRICE_MEMBER_VIP;
+        if (request.getAmount() == null || request.getAmount().compareTo(expectedPrice) != 0) {
+            throw new BizException(4106, "membership order amount invalid, expected=" + expectedPrice);
+        }
     }
 }

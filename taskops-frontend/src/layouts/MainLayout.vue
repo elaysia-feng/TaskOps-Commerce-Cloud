@@ -3,12 +3,14 @@
     <aside class="sidebar">
       <div>
         <p class="hero-tag">TaskOps Cloud</p>
-        <div class="logo">Control Center</div>
+        <div class="logo">控制台</div>
       </div>
-      <RouterLink to="/dashboard">控制台</RouterLink>
+      <RouterLink to="/dashboard">首页总览</RouterLink>
       <RouterLink to="/tasks">任务列表</RouterLink>
       <RouterLink to="/tasks/create">创建任务</RouterLink>
-      <RouterLink to="/orders">下单支付</RouterLink>
+      <RouterLink to="/orders/create">创建订单</RouterLink>
+      <RouterLink to="/payments">订单支付</RouterLink>
+      <RouterLink to="/account/orders">我的订单</RouterLink>
     </aside>
 
     <div class="content-wrap">

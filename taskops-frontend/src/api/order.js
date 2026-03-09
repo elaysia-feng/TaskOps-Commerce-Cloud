@@ -1,4 +1,4 @@
-import http from "./http";
+﻿import http from "./http";
 
 export function createOrder(data) {
   return http.post("/orders", data);
@@ -6,6 +6,10 @@ export function createOrder(data) {
 
 export function getOrder(orderNo) {
   return http.get(`/orders/${orderNo}`);
+}
+
+export function listMyOrders() {
+  return http.get("/orders/mine");
 }
 
 export function cancelOrder(orderNo) {

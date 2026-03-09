@@ -17,14 +17,14 @@ public class RabbitMqConfig {
     }
 
     @Bean
-    public Queue orderCreatedQueue() {
-        return new Queue(MqConstants.QUEUE_PAY_ORDER_CREATED, true);
+    public Queue paySuccessOrderQueue() {
+        return new Queue(MqConstants.QUEUE_PAY_SUCCESS_ORDER, true);
     }
 
     @Bean
-    public Binding orderCreatedBinding(Queue orderCreatedQueue, DirectExchange businessExchange) {
-        return BindingBuilder.bind(orderCreatedQueue)
+    public Binding paySuccessOrderBinding(Queue paySuccessOrderQueue, DirectExchange businessExchange) {
+        return BindingBuilder.bind(paySuccessOrderQueue)
                 .to(businessExchange)
-                .with(MqConstants.RK_ORDER_CREATED);
+                .with(MqConstants.RK_PAY_SUCCESS);
     }
 }

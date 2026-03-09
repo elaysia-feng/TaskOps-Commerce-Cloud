@@ -17,11 +17,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class DirectListener {
 
-    @RabbitListener(bindings = @QueueBinding(
-            value = @Queue(name = MqConstants.QUEUE_ORDER_PAY_SUCCESS, durable = "true"),
-            exchange = @Exchange(name = MqConstants.EXCHANGE_BUSINESS, type = ExchangeTypes.DIRECT, durable = "true"),
-            key = MqConstants.RK_PAY_SUCCESS
-    ))
+    @RabbitListener(queues =  MqConstants.QUEUE_PAY_SUCCESS_ORDER)
     public void listenDirectQueue(PaySuccessEvent event) {
         if (event == null || event.getOrderNo() == null) {
             log.warn("ignore invalid pay success event: {}", event);

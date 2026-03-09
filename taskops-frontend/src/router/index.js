@@ -6,7 +6,9 @@ import RegisterView from "../views/RegisterView.vue";
 import TaskListView from "../views/TaskListView.vue";
 import CreateTaskView from "../views/CreateTaskView.vue";
 import DashboardView from "../views/DashboardView.vue";
-import OrderPayView from "../views/OrderPayView.vue";
+import CreateOrderView from "../views/CreateOrderView.vue";
+import PaymentView from "../views/PaymentView.vue";
+import MyOrdersView from "../views/MyOrdersView.vue";
 import { getToken } from "../utils/auth";
 
 const routes = [
@@ -19,7 +21,10 @@ const routes = [
       { path: "dashboard", component: DashboardView },
       { path: "tasks", component: TaskListView },
       { path: "tasks/create", component: CreateTaskView },
-      { path: "orders", component: OrderPayView }
+      { path: "orders", redirect: "/orders/create" },
+      { path: "orders/create", component: CreateOrderView },
+      { path: "payments", component: PaymentView },
+      { path: "account/orders", component: MyOrdersView }
     ]
   },
   {

@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   --bg: #f2f5ff;
   --surface: rgba(255, 255, 255, 0.88);
   --text: #0f172a;
@@ -84,6 +84,9 @@ select:focus {
   font-weight: 600;
   cursor: pointer;
   transition: transform 0.15s ease, box-shadow 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .btn:hover {
@@ -258,6 +261,68 @@ select:focus {
   align-items: end;
 }
 
+.order-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.95fr);
+  gap: 18px;
+}
+
+.form-split,
+.product-brief,
+.page-head {
+  display: grid;
+  gap: 12px;
+}
+
+.form-split {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.product-brief {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.product-brief strong,
+.section-kicker {
+  display: block;
+}
+
+.section-kicker {
+  margin: 0 0 6px;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #2563eb;
+}
+
+.catalog-list {
+  display: grid;
+  gap: 12px;
+}
+
+.catalog-item,
+.empty-state,
+.helper-card {
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.helper-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 10px;
+  color: var(--muted);
+}
+
+.page-head {
+  grid-template-columns: 1fr auto;
+  align-items: start;
+}
+
 .task-grid {
   display: grid;
   gap: 12px;
@@ -274,6 +339,15 @@ select:focus {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
+}
+
+.chart-box {
+  height: 320px;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.95);
 }
 
 .tag {
@@ -304,6 +378,11 @@ select:focus {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
+}
+
+.action-row-start {
+  justify-content: flex-start;
 }
 
 .muted {
@@ -351,7 +430,11 @@ select:focus {
 
   .kpi-grid,
   .inline-form,
-  .order-form {
+  .order-form,
+  .order-shell,
+  .form-split,
+  .product-brief,
+  .page-head {
     grid-template-columns: 1fr;
   }
 }

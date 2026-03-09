@@ -12,6 +12,7 @@ import java.io.IOException;
 /**
  * Bind user headers from gateway into ThreadLocal for current request.
  */
+//每一个 HTTP 请求进来，Tomcat 都会分配一个独立的线程来处理它
 public class UserContextFilter extends OncePerRequestFilter {
 
     @Override

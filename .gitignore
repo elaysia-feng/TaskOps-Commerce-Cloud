@@ -1,8 +1,8 @@
 **/target/
 /.idea/
+/day*/
 *.iml
 *.log
-
 # OS files
 .DS_Store
 Thumbs.db
