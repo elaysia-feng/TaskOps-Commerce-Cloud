@@ -1,4 +1,4 @@
-﻿import http from "./http";
+import http from "./http";
 
 export function searchTasks(data) {
   return http.post("/tasks/search", data);
@@ -14,4 +14,12 @@ export function getHotTasks() {
 
 export function getTaskDetail(id) {
   return http.get(`/tasks/${id}`);
+}
+
+export function getMembership() {
+  return http.get("/tasks/membership/me");
+}
+
+export function switchMembership(level) {
+  return http.put(`/tasks/membership/me/${level}`);
 }

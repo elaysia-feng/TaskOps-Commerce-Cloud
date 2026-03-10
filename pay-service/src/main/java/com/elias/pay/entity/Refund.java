@@ -9,22 +9,20 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("t_payment")
-public class Payment {
+@TableName("t_refund")
+public class Refund {
     @TableId(type = IdType.AUTO)
     private Long id;
+    private String refundNo;
     private String payNo;
     private String orderNo;
-    private String channel;
-    private String subject;
-    private BigDecimal amount;
+    private BigDecimal refundAmount;
     private String status;
-    private String thirdTradeNo;
-    private String buyerId;
-    private LocalDateTime payTime;
+    private String thirdRefundNo;
+    private String refundReason;
+    private LocalDateTime refundTime;
     private LocalDateTime callbackTime;
     private String callbackContent;
-    private String failReason;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

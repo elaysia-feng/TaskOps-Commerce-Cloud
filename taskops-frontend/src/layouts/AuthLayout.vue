@@ -1,13 +1,15 @@
 <template>
-  <div class="auth-layout">
-    <aside class="auth-side">
-      <p class="hero-tag">TaskOps Platform</p>
-      <h1>Build Reliable Microservice Workflows</h1>
-      <p>面向任务、订单、支付链路的一体化联调工作台。</p>
-      <ul>
-        <li>Gateway + JWT 统一鉴权</li>
-        <li>Sentinel 流控与降级</li>
-        <li>多服务链路快速验证</li>
+  <div class="auth-shell">
+    <aside class="auth-aside">
+      <p class="eyebrow">TaskOps Cloud</p>
+      <h1>任务、订单、支付一体化协同。</h1>
+      <p class="auth-copy">
+        当前前端已经对齐仓库里的真实微服务路由，覆盖认证、任务、订单、支付和后台聚合能力。
+      </p>
+      <ul class="auth-points">
+        <li>JWT 登录与路由鉴权</li>
+        <li>任务发布配额与会员视图</li>
+        <li>订单创建、支付中心与我的订单</li>
       </ul>
     </aside>
     <main class="auth-main">

@@ -5,6 +5,7 @@ import com.elias.task.dto.CreateTaskRequest;
 import com.elias.task.dto.TaskQueryRequest;
 import com.elias.task.entity.InternshipTask;
 
+import javax.validation.constraints.NotBlank;
 import java.util.List;
 /**
  * 文件说明： TaskAppService.
@@ -19,4 +20,15 @@ public interface TaskAppService {
     InternshipTask detail(Long id);
 
     List<InternshipTask> hot();
+
+    void acceptTask(@NotBlank Long id);
+
+
+    void cancelTask(Long id, Long uid, String reason);
+
+    IPage<InternshipTask> publishedTasks(Long uid, TaskQueryRequest request);
+
+    IPage<InternshipTask> acceptedTasks(Long uid, TaskQueryRequest request);
+
+    IPage<InternshipTask> reviewTasks(Long uid, TaskQueryRequest request);
 }

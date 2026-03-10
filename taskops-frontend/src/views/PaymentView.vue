@@ -1,73 +1,79 @@
 <template>
-  <div class="order-shell">
-    <section class="card">
-      <p class="section-kicker">支付</p>
-      <h1>支付已有订单</h1>
-      <p class="muted">输入已有订单号后再查询和支付，不再和创建订单混在一起。</p>
+  <section class="page-grid">
+    <section class="panel">
+      <div class="panel-head">
+        <p class="eyebrow">支付</p>
+        <h1>支付中心</h1>
+        <p class="muted">
+          当前后端提供支付单创建、查询和关闭能力，前端暂不直接模拟第三方支付成功回调。
+        </p>
+      </div>
 
-      <form class="form-grid mt12" @submit.prevent="handleQueryOrder">
+      <form class="stack" @submit.prevent="handleCreate">
         <label>
           订单号
           <input v-model.trim="orderNo" placeholder="ORD..." required />
         </label>
-        <div class="action-row action-row-start">
-          <button class="btn secondary" :disabled="loadingQuery">
-            {{ loadingQuery ? "查询中..." : "查询订单" }}
+        <div class="button-row">
+          <button class="btn" :disabled="loadingCreate">{{ loadingCreate ? "创建中..." : "创建支付单" }}</button>
+          <button class="btn ghost" type="button" :disabled="loadingQuery || !orderNo" @click="handleQuery">
+            {{ loadingQuery ? "查询中..." : "查询支付单" }}
           </button>
-          <button class="btn" type="button" :disabled="!canPay || loadingPay" @click="handleMockPay">
-            {{ loadingPay ? "支付中..." : "模拟支付回调" }}
+          <button class="btn ghost" type="button" :disabled="loadingClose || !orderNo" @click="handleClose">
+            {{ loadingClose ? "关闭中..." : "关闭支付单" }}
           </button>
         </div>
       </form>
 
-      <p v-if="errorText" class="error mt12">{{ errorText }}</p>
-      <p v-if="successText" class="success mt12">{{ successText }}</p>
+      <p v-if="errorText" class="error">{{ errorText }}</p>
+      <p v-if="successText" class="success">{{ successText }}</p>
 
-      <article v-if="orderDetail" class="task-card mt12">
-        <header>
-          <h3>{{ orderDetail.orderNo }}</h3>
-          <span class="tag">{{ statusLabel(orderDetail.status) }}</span>
+      <article v-if="paymentDetail" class="panel nested-panel">
+        <header class="card-head">
+          <h3>{{ paymentDetail.payNo }}</h3>
+          <span class="tag">{{ paymentStatusLabel(paymentDetail.status) }}</span>
         </header>
-        <p class="muted">SKU：{{ orderDetail.skuCode }}</p>
-        <p class="muted">数量：{{ orderDetail.quantity }}</p>
-        <p class="muted">金额：{{ formatAmount(orderDetail.amount) }}</p>
-        <p class="muted">用户 ID：{{ orderDetail.userId }}</p>
-        <p v-if="orderDetail.status !== 'PENDING_PAY'" class="muted mt12">当前订单状态不可支付。</p>
+        <div class="meta-stack">
+          <div class="meta-row"><span>订单号</span><strong>{{ paymentDetail.orderNo }}</strong></div>
+          <div class="meta-row"><span>支付渠道</span><strong>{{ paymentDetail.channel || "-" }}</strong></div>
+          <div class="meta-row"><span>支付金额</span><strong>{{ formatAmount(paymentDetail.amount) }}</strong></div>
+          <div class="meta-row"><span>标题</span><strong>{{ paymentDetail.subject || "-" }}</strong></div>
+          <div class="meta-row"><span>第三方流水号</span><strong>{{ paymentDetail.thirdTradeNo || "-" }}</strong></div>
+        </div>
       </article>
     </section>
 
-    <section class="card helper-card">
-      <p class="section-kicker">说明</p>
-      <h2>推荐流程</h2>
-      <ol class="helper-list mt12">
-        <li>先在创建订单页面生成订单。</li>
-        <li>将生成的订单号带到本页面。</li>
-        <li>先查询订单状态，再按需触发支付回调。</li>
-        <li>最后到我的订单页面查看完整结果。</li>
-      </ol>
-      <div class="action-row mt12 action-row-start">
-        <RouterLink class="btn secondary" to="/orders/create">创建订单</RouterLink>
-        <RouterLink class="btn secondary" to="/account/orders">我的订单</RouterLink>
+    <section class="panel">
+      <div class="panel-head">
+        <p class="eyebrow">流程说明</p>
+        <h2>当前支付流程</h2>
       </div>
+      <ol class="helper-list">
+        <li>先在订单页创建订单。</li>
+        <li>使用返回的订单号创建支付单。</li>
+        <li>在本页查询支付单状态。</li>
+        <li>如果订单不再需要支付，可在本页关闭支付单。</li>
+      </ol>
+      <p class="muted">
+        如果后续在 `pay-service` 重新补上通知接口，这里可以继续增加模拟支付成功按钮。
+      </p>
     </section>
-  </div>
+  </section>
 </template>
 
 <script setup>
-import { computed, ref, watch } from "vue";
-import { RouterLink, useRoute } from "vue-router";
-import { getOrder } from "../api/order";
-import { mockPayCallback } from "../api/pay";
+import { ref, watch } from "vue";
+import { useRoute } from "vue-router";
+import { closePay, createPay, getPayDetail } from "../api/pay";
 
 const route = useRoute();
-const loadingPay = ref(false);
+const orderNo = ref(route.query.orderNo || "");
+const loadingCreate = ref(false);
 const loadingQuery = ref(false);
+const loadingClose = ref(false);
 const errorText = ref("");
 const successText = ref("");
-const orderNo = ref(route.query.orderNo || "");
-const orderDetail = ref(null);
-
-const canPay = computed(() => !!orderNo.value && orderDetail.value?.status === "PENDING_PAY");
+const paymentDetail = ref(null);
 
 watch(
   () => route.query.orderNo,
@@ -77,56 +83,60 @@ watch(
 );
 
 function formatAmount(amount) {
-  return `CNY ${Number(amount).toFixed(2)}`;
+  return `¥${Number(amount || 0).toFixed(2)}`;
 }
 
-function statusLabel(status) {
+function paymentStatusLabel(status) {
   const map = {
-    PENDING_PAY: "待支付",
-    PAID: "已支付",
-    DONE: "已完成",
-    CANCELLED: "已取消"
+    CREATED: "已创建",
+    WAIT_BUYER_PAY: "待支付",
+    CLOSED: "已关闭",
+    SUCCESS: "已支付",
+    TRADE_SUCCESS: "支付成功"
   };
   return map[status] || status;
 }
 
-async function handleMockPay() {
-  if (!orderNo.value) {
-    errorText.value = "请先输入订单号";
-    return;
-  }
-  if (!canPay.value) {
-    errorText.value = "只有待支付订单才能支付";
-    return;
-  }
-  loadingPay.value = true;
+async function handleCreate() {
+  loadingCreate.value = true;
   errorText.value = "";
   successText.value = "";
   try {
-    await mockPayCallback(orderNo.value);
-    successText.value = "支付回调已发送";
-    await handleQueryOrder();
+    paymentDetail.value = await createPay(orderNo.value);
+    successText.value = `支付单已创建：${paymentDetail.value.payNo}`;
   } catch (error) {
-    errorText.value = error.message || "支付回调失败";
+    errorText.value = error.message || "创建支付单失败";
   } finally {
-    loadingPay.value = false;
+    loadingCreate.value = false;
   }
 }
 
-async function handleQueryOrder() {
-  if (!orderNo.value) {
-    errorText.value = "请先输入订单号";
-    return;
-  }
+async function handleQuery() {
   loadingQuery.value = true;
   errorText.value = "";
   successText.value = "";
   try {
-    orderDetail.value = await getOrder(orderNo.value);
+    paymentDetail.value = await getPayDetail(orderNo.value);
+    successText.value = `当前支付状态：${paymentStatusLabel(paymentDetail.value.status)}`;
   } catch (error) {
-    errorText.value = error.message || "查询订单失败";
+    errorText.value = error.message || "查询支付单失败";
   } finally {
     loadingQuery.value = false;
+  }
+}
+
+async function handleClose() {
+  loadingClose.value = true;
+  errorText.value = "";
+  successText.value = "";
+  try {
+    await closePay(orderNo.value);
+    successText.value = "支付单已关闭";
+    paymentDetail.value = await getPayDetail(orderNo.value);
+  } catch (error) {
+    errorText.value = error.message || "关闭支付单失败";
+  } finally {
+    loadingClose.value = false;
   }
 }
 </script>

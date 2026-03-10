@@ -1,24 +1,29 @@
 <template>
-  <div class="admin-layout">
+  <div class="app-shell">
     <aside class="sidebar">
-      <div>
-        <p class="hero-tag">TaskOps Cloud</p>
-        <div class="logo">控制台</div>
+      <div class="sidebar-brand">
+        <p class="eyebrow">TaskOps Cloud</p>
+        <h2>工作台</h2>
       </div>
-      <RouterLink to="/dashboard">首页总览</RouterLink>
-      <RouterLink to="/tasks">任务列表</RouterLink>
-      <RouterLink to="/tasks/create">创建任务</RouterLink>
-      <RouterLink to="/orders/create">创建订单</RouterLink>
-      <RouterLink to="/payments">订单支付</RouterLink>
-      <RouterLink to="/account/orders">我的订单</RouterLink>
+      <nav class="nav-list">
+        <RouterLink to="/dashboard">首页总览</RouterLink>
+        <RouterLink to="/tasks">任务大厅</RouterLink>
+        <RouterLink to="/tasks/create">发布任务</RouterLink>
+        <RouterLink to="/orders/create">创建订单</RouterLink>
+        <RouterLink to="/payments">支付中心</RouterLink>
+        <RouterLink to="/account/orders">我的订单</RouterLink>
+      </nav>
     </aside>
 
-    <div class="content-wrap">
-      <header class="admin-topbar">
-        <div class="welcome">你好，{{ username }}</div>
-        <button class="btn secondary" @click="logout">退出登录</button>
+    <div class="app-main">
+      <header class="topbar">
+        <div>
+          <p class="topbar-label">当前登录</p>
+          <strong>{{ username }}</strong>
+        </div>
+        <button class="btn ghost" @click="logout">退出登录</button>
       </header>
-      <main class="content-main">
+      <main class="page-body">
         <RouterView />
       </main>
     </div>

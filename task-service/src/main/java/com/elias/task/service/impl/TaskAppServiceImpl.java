@@ -4,9 +4,12 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.elias.common.ApiResponse;
+import com.elias.common.context.UserContext;
 import com.elias.common.exception.BizException;
+import com.elias.common.exception.ErrorCode;
 import com.elias.task.cache.CacheClient;
 import com.elias.task.client.AuthClient;
+import com.elias.task.config.UserContextConfig;
 import com.elias.task.dto.CreateTaskRequest;
 import com.elias.task.dto.TaskQueryRequest;
 import com.elias.task.dto.UserInfoDTO;
@@ -15,6 +18,7 @@ import com.elias.task.mapper.InternshipTaskMapper;
 import com.elias.task.service.TaskAppService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -22,11 +26,13 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import javax.annotation.Resource;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.Collections;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
@@ -48,66 +54,76 @@ public class TaskAppServiceImpl implements TaskAppService {
     private final StringRedisTemplate redisTemplate;
     private final AuthClient authClient;
     private final CacheClient cacheClient;
-    // 0) 注入任务查询线程池：用于hot()并行回填详情
+
     @Resource(name = "taskQueryExecutor")
     private Executor taskQueryExecutor;
 
     @Override
     public Long create(CreateTaskRequest request, Long ownerId) {
-        // 1) 先通过auth-service校验owner是否存在
         ApiResponse<UserInfoDTO> userInfoResp = authClient.userInfo(ownerId);
-        // 1.1) 远程校验失败时终止创建
         if (userInfoResp == null || userInfoResp.getData() == null) {
-            throw new BizException(4004, "owner not found via auth-service");
+            throw new BizException(4004, "publisher not found via auth-service");
         }
 
-        // 2) 组装任务基础字段
+        if (request.getDeadline() != null && request.getDeadline().isBefore(LocalDateTime.now())) {
+            throw new BizException(4107, "deadline must be in the future");
+        }
+
         InternshipTask task = new InternshipTask();
-        task.setOwnerId(ownerId);
+        task.setPublisherId(ownerId);
+        task.setAcceptorId(null);
         task.setTitle(request.getTitle());
         task.setDescription(request.getDescription());
-        task.setTechStack(request.getTechStack());
-
-        // 2.1) 设置默认业务字段
+        task.setCategory(StringUtils.hasText(request.getCategory()) ? request.getCategory().toUpperCase() : "GENERAL");
+        task.setTags(request.getTechStack());
+        task.setLocation(request.getLocation());
+        task.setContactInfo(request.getContactInfo());
+        task.setRewardAmount(defaultAmount(request.getRewardAmount()));
+        task.setServiceFee(defaultAmount(request.getServiceFee()));
+        task.setSettleAmount(defaultAmount(task.getRewardAmount().subtract(task.getServiceFee())));
+        task.setTradeOrderNo("TRD" + System.currentTimeMillis() + UUID.randomUUID().toString().substring(0, 6).toUpperCase());
         task.setPriority(request.getPriority() == null ? 3 : request.getPriority());
-        task.setStatus("TODO");
-        task.setProgress(0);
+        task.setStatus("OPEN");
+        task.setDeadline(request.getDeadline());
+        task.setProofRequired(Boolean.TRUE.equals(request.getProofRequired()));
+        task.setViewCount(0);
         task.setCommentCount(0);
-
-        // 2.2) 计算质量分并设置时间字段
-        task.setQualityScore(calculateQuality(request.getTitle(), request.getDescription()));
+        task.setQualityScore(0);
         task.setCreatedAt(LocalDateTime.now());
         task.setUpdatedAt(LocalDateTime.now());
 
-        // 3) 入库并返回新任务ID
         taskMapper.insert(task);
         return task.getId();
     }
 
     @Override
     public IPage<InternshipTask> search(TaskQueryRequest request) {
-        // 4) 构建分页参数（页码最小1，每页最多50）
         Page<InternshipTask> page = new Page<>(Math.max(1, request.getPage()), Math.max(1, Math.min(50, request.getSize())));
 
-        // 4.1) 构建动态查询条件并按更新时间倒序
         LambdaQueryWrapper<InternshipTask> wrapper = new LambdaQueryWrapper<>();
-        wrapper.orderByDesc(InternshipTask::getUpdatedAt);
+        wrapper.orderByDesc(InternshipTask::getRewardAmount)
+                .orderByAsc(InternshipTask::getPriority)
+                .orderByDesc(InternshipTask::getCreatedAt);
 
-        // 4.2) 关键词条件（标题/描述/技术栈）
         if (StringUtils.hasText(request.getKeyword())) {
             wrapper.and(w -> w.like(InternshipTask::getTitle, request.getKeyword())
                     .or()
                     .like(InternshipTask::getDescription, request.getKeyword())
                     .or()
-                    .like(InternshipTask::getTechStack, request.getKeyword()));
+                    .like(InternshipTask::getTags, request.getKeyword())
+                    .or()
+                    .like(InternshipTask::getLocation, request.getKeyword()));
         }
 
-        // 4.3) 状态条件
         if (StringUtils.hasText(request.getStatus())) {
-            wrapper.eq(InternshipTask::getStatus, request.getStatus());
+            wrapper.eq(InternshipTask::getStatus, request.getStatus().toUpperCase());
+        } else {
+            wrapper.eq(InternshipTask::getStatus, "OPEN");
         }
 
-        // 4.4) 优先级区间条件
+        if (StringUtils.hasText(request.getCategory())) {
+            wrapper.eq(InternshipTask::getCategory, request.getCategory().toUpperCase());
+        }
         if (request.getMinPriority() != null) {
             wrapper.ge(InternshipTask::getPriority, request.getMinPriority());
         }
@@ -115,49 +131,36 @@ public class TaskAppServiceImpl implements TaskAppService {
             wrapper.le(InternshipTask::getPriority, request.getMaxPriority());
         }
 
-        // 5) 执行分页查询并返回标准分页对象
         return taskMapper.selectPage(page, wrapper);
     }
 
     @Override
     public InternshipTask detail(Long id) {
-        // 6) 查询任务详情
         InternshipTask task = taskMapper.selectById(id);
-        // 6.1) 任务不存在则抛业务异常
         if (task == null) {
             throw new BizException(4041, "task not found");
         }
 
-        // 6.2) 每次详情访问更新进度与更新时间（示例业务逻辑）
-        task.setProgress(Math.min(100, task.getProgress() + 1));
+        task.setViewCount((task.getViewCount() == null ? 0 : task.getViewCount()) + 1);
         task.setUpdatedAt(LocalDateTime.now());
         taskMapper.updateById(task);
 
-        // 6.3) 主动删除详情缓存，避免旧值
         cacheClient.delete(TASK_DETAIL_CACHE_KEY_PREFIX + id);
-
-        // 6.4) 刷新热榜分值
         redisTemplate.opsForZSet().add(HOT_KEY, String.valueOf(task.getId()), hotScore(task));
         return task;
     }
 
     @Override
     public List<InternshipTask> hot() {
-        // 7) 先从Redis读取热榜Top10,reverseRange这个是按照分数从低到高取
         Set<String> ids = redisTemplate.opsForZSet().reverseRange(HOT_KEY, 0, 9);
-
-        // 7.1) 热榜为空时触发重建并再读一次
         if (ids == null || ids.isEmpty()) {
             rebuildHot();
             ids = redisTemplate.opsForZSet().reverseRange(HOT_KEY, 0, 9);
         }
-
-        // 7.2) 仍为空则返回空列表
         if (ids == null || ids.isEmpty()) {
             return Collections.emptyList();
         }
 
-        // 7.3) 使用线程池并行回填任务详情（带缓存防护：穿透/击穿/雪崩）
         List<CompletableFuture<InternshipTask>> futures = new ArrayList<>();
         for (String id : ids) {
             final Long taskId = Long.valueOf(id);
@@ -169,43 +172,181 @@ public class TaskAppServiceImpl implements TaskAppService {
             }, taskQueryExecutor));
         }
 
-        // 7.4) 汇总并行结果，过滤空值后返回
         return futures.stream()
                 .map(CompletableFuture::join)
                 .filter(item -> item != null)
                 .collect(Collectors.toList());
     }
 
+    //接单
+    @Override
+    public void acceptTask(Long id) {
+        InternshipTask task = taskMapper.selectById(id);
+        if (task == null) {
+            throw new BizException(4041, "task not found");
+        }
+        Long UID = UserContext.userId();
+        if (UID == null){
+            throw new BizException(401, "用户不存在, 请先登录正确的账户");
+        }
+        if ("CANCELLED".equals(task.getStatus())) {
+            throw new BizException(ErrorCode.TASK_CANCELLED);
+        }
+        task.setAcceptorId(UID);
+        task.setAcceptedAt(LocalDateTime.now());
+    }
+    //取消任务
+    @Override
+    public void cancelTask(Long id, Long uid, String reason) {
+        InternshipTask internshipTask = taskMapper.selectById(id);
+        if (internshipTask == null) {
+            throw new BizException(4041, "task not found");
+        }
+        LocalDateTime now = LocalDateTime.now();
+        internshipTask.setCancelledAt(now);
+        internshipTask.setCancelReason(reason);
+        internshipTask.setStatus("CANCELLED");
+    }
+    // 查询当前用户创建的任务
+    public IPage<InternshipTask> publishedTasks(Long uid, TaskQueryRequest request) {
+        long pageNum = request == null || request.getPage() == null ? 1 : request.getPage();
+        long pageSize = request == null || request.getSize() == null ? 10 : request.getSize();
+
+        Page<InternshipTask> page = new Page<>(pageNum, pageSize);
+
+        LambdaQueryWrapper<InternshipTask> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(InternshipTask::getPublisherId, uid)
+                .orderByDesc(InternshipTask::getCreatedAt);
+
+        if (request != null) {
+            if (request.getStatus() != null && !request.getStatus().isEmpty()) {
+                wrapper.eq(InternshipTask::getStatus, request.getStatus().toUpperCase());
+            }
+
+            if (request.getCategory() != null && !request.getCategory().isEmpty()) {
+                wrapper.eq(InternshipTask::getCategory, request.getCategory().toUpperCase());
+            }
+
+            if (request.getKeyword() != null && !request.getKeyword().isEmpty()) {
+                wrapper.and(w -> w.like(InternshipTask::getTitle, request.getKeyword())
+                        .or()
+                        .like(InternshipTask::getDescription, request.getKeyword())
+                        .or()
+                        .like(InternshipTask::getTags, request.getKeyword())
+                        .or()
+                        .like(InternshipTask::getLocation, request.getKeyword()));
+            }
+
+            if (request.getMinPriority() != null) {
+                wrapper.ge(InternshipTask::getPriority, request.getMinPriority());
+            }
+
+            if (request.getMaxPriority() != null) {
+                wrapper.le(InternshipTask::getPriority, request.getMaxPriority());
+            }
+        }
+
+        return taskMapper.selectPage(page, wrapper);
+    }
+
+
+    @Override
+    public IPage<InternshipTask> acceptedTasks(Long uid, TaskQueryRequest request) {
+        // 创建分页对象
+        // 第一个参数是当前页码，最小为 1
+        // 第二个参数是每页条数，最小为 1，最大限制为 50，防止一次查太多数据
+        Page<InternshipTask> page = new Page<>(
+                Math.max(1, request.getPage()),
+                Math.max(1, Math.min(50, request.getSize()))
+        );
+
+        // 构造查询条件
+        LambdaQueryWrapper<InternshipTask> wrapper = new LambdaQueryWrapper<>();
+
+        // 只查询当前用户发布的任务
+        // 并按照创建时间倒序排列，最新发布的任务排前面
+        wrapper.eq(InternshipTask::getAcceptorId, uid)
+                .orderByDesc(InternshipTask::getCreatedAt);
+
+        // 如果前端传了任务状态，则按状态精确查询
+        // toUpperCase() 是为了和数据库里统一的大写状态值匹配
+        if (StringUtils.hasText(request.getStatus())) {
+            wrapper.eq(InternshipTask::getStatus, request.getStatus().toUpperCase());
+        }
+
+        // 如果前端传了任务分类，则按分类精确查询
+        // 同样转成大写，避免大小写不一致
+        if (StringUtils.hasText(request.getCategory())) {
+            wrapper.eq(InternshipTask::getCategory, request.getCategory().toUpperCase());
+        }
+
+        // 如果前端传了关键字，则做模糊搜索
+        // 关键字会在以下字段中匹配：
+        // 标题、描述、标签、地点
+        // 这些条件之间是 or，也就是任意一个字段匹配都可以查出来
+        if (StringUtils.hasText(request.getKeyword())) {
+            wrapper.and(w -> w.like(InternshipTask::getTitle, request.getKeyword())
+                    .or()
+                    .like(InternshipTask::getDescription, request.getKeyword())
+                    .or()
+                    .like(InternshipTask::getTags, request.getKeyword())
+                    .or()
+                    .like(InternshipTask::getLocation, request.getKeyword()));
+        }
+
+        // 如果传了最小优先级，则查询优先级大于等于该值的任务
+        if (request.getMinPriority() != null) {
+            wrapper.ge(InternshipTask::getPriority, request.getMinPriority());
+        }
+
+        // 如果传了最大优先级，则查询优先级小于等于该值的任务
+        if (request.getMaxPriority() != null) {
+            wrapper.le(InternshipTask::getPriority, request.getMaxPriority());
+        }
+
+        // 执行分页查询并返回结果
+        return taskMapper.selectPage(page, wrapper);
+    }
+
+    @Override
+    public IPage<InternshipTask> reviewTasks(Long uid, TaskQueryRequest request) {
+        Page<InternshipTask> page = new Page<>(
+                Math.max(1, request.getPage()),
+                Math.max(1, Math.min(50, request.getSize()))
+        );
+
+        LambdaQueryWrapper<InternshipTask> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(InternshipTask::getPublisherId, uid)
+                .eq(InternshipTask::getStatus, "SUBMITTED")
+                .orderByDesc(InternshipTask::getSubmittedAt);
+
+        return taskMapper.selectPage(page, wrapper);
+    }
+
+
+
     @Scheduled(cron = "0 */5 * * * ?")
     public void rebuildHot() {
-        // 8) 拉取最近更新的任务作为热榜候选
         List<InternshipTask> list = taskMapper.selectList(new LambdaQueryWrapper<InternshipTask>()
-                .orderByDesc(InternshipTask::getUpdatedAt)
+                .in(InternshipTask::getStatus, "OPEN", "TAKEN", "SUBMITTED")
+                .orderByDesc(InternshipTask::getRewardAmount)
+                .orderByDesc(InternshipTask::getCreatedAt)
                 .last("limit 200"));
 
-        // 8.1) 清空旧热榜
         redisTemplate.delete(HOT_KEY);
-
-        // 8.2) 重新写入热榜分值
         for (InternshipTask task : list) {
             redisTemplate.opsForZSet().add(HOT_KEY, String.valueOf(task.getId()), hotScore(task));
         }
     }
 
-    private int calculateQuality(String title, String desc) {
-        // 9) 根据标题与描述长度给出基础质量分（演示规则）
-        int score = 40 + Math.min(title.length(), 40) / 2 + Math.min(desc.length(), 1000) / 50;
-        return Math.min(100, score);
-    }
-
     private double hotScore(InternshipTask task) {
-        // 10) 综合质量、进度、评论、优先级计算热度分
-        return task.getQualityScore() + task.getProgress() * 0.5 + task.getCommentCount() * 2 + (6 - task.getPriority()) * 3;
+        double reward = task.getRewardAmount() == null ? 0D : task.getRewardAmount().doubleValue();
+        double views = task.getViewCount() == null ? 0D : task.getViewCount();
+        double comments = task.getCommentCount() == null ? 0D : task.getCommentCount();
+        return reward * 100 + views * 0.5 + comments * 2;
     }
 
     private InternshipTask queryTaskWithCacheProtection(Long taskId) {
-        // 11) 查询任务详情缓存：
-        // 11.1) 空值缓存防穿透 11.2) 互斥锁防击穿 11.3) TTL抖动防雪崩
         return cacheClient.queryWithMutex(
                 TASK_DETAIL_CACHE_KEY_PREFIX,
                 TASK_DETAIL_LOCK_KEY_PREFIX,
@@ -215,5 +356,12 @@ public class TaskAppServiceImpl implements TaskAppService {
                 TASK_DETAIL_CACHE_TTL_MINUTES,
                 TimeUnit.MINUTES
         );
+    }
+
+    private BigDecimal defaultAmount(BigDecimal amount) {
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) < 0) {
+            return BigDecimal.ZERO;
+        }
+        return amount;
     }
 }

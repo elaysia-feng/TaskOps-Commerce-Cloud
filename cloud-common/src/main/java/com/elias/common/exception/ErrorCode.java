@@ -24,7 +24,11 @@ public enum ErrorCode {
 
     USER_CREATE_NULL(-2, "用户名或密码创建不能为空"),
 
-    ROLE_NOT_FOUND(4042, "默认角色不存在");
+    ROLE_NOT_FOUND(4042, "默认角色不存在"),
+
+    ORDER_NO_NULL(4444, "订单号不能为空"),
+
+    TASK_CANCELLED(1000, "任务取消");
 
     private final int code;
     private final String message;

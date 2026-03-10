@@ -6,6 +6,7 @@ import com.elias.common.ApiResponse;
 import com.elias.common.context.UserContext;
 import com.elias.common.exception.BizException;
 import com.elias.common.exception.ErrorCode;
+import com.elias.task.dto.CancelTaskRequest;
 import com.elias.task.dto.CreateTaskRequest;
 import com.elias.task.dto.TaskQueryRequest;
 import com.elias.task.entity.InternshipTask;
@@ -19,13 +20,17 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.web.bind.annotation.*;
 
 import javax.validation.Valid;
+import javax.validation.constraints.NotBlank;
+import javax.validation.constraints.NotNull;
+import java.awt.print.Pageable;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 @RestController
 @RequestMapping("/api/tasks")
-@Tag(name = "Task API", description = "Task create/search/detail/hot and 简单会员配额演示")
+@Tag(name = "Task API", description = "接单平台任务创建、搜索、详情与热榜接口")
 public class TaskController {
 
     private final TaskAppService taskAppService;
@@ -41,20 +46,20 @@ public class TaskController {
     }
 
     @PostMapping
-    @Operation(summary = "Create task")
+    @Operation(summary = "创建任务")
     public ApiResponse<Long> create(@Valid @RequestBody CreateTaskRequest request) {
         Long uid = requireLogin();
 
         long used = usedTaskCount(uid);
         int limit = taskQuotaService.maxTasks(uid);
         if (used >= limit) {
-            throw new BizException(4104, "task limit reached, current limit=" + limit);
+            throw new BizException(4104, "task publish limit reached, current limit=" + limit);
         }
         return ApiResponse.ok(taskAppService.create(request, uid));
     }
 
     @GetMapping("/membership/me")
-    @Operation(summary = "Get my membership quota")
+    @Operation(summary = "查询我的发布配额")
     public ApiResponse<Map<String, Object>> membership() {
         Long uid = requireLogin();
         MembershipLevel level = taskQuotaService.getLevel(uid);
@@ -70,7 +75,7 @@ public class TaskController {
     }
 
     @PutMapping("/membership/me/{level}")
-    @Operation(summary = "Switch my membership level (demo only)")
+    @Operation(summary = "切换我的会员等级（演示用）")
     public ApiResponse<Void> switchMembership(@PathVariable("level") String level) {
         Long uid = requireLogin();
         MembershipLevel membershipLevel = MembershipLevel.valueOf(level.toUpperCase());
@@ -79,22 +84,78 @@ public class TaskController {
     }
 
     @PostMapping("/search")
-    @Operation(summary = "Search task page")
+    @Operation(summary = "搜索任务")
     public ApiResponse<IPage<InternshipTask>> search(@RequestBody TaskQueryRequest request) {
         return ApiResponse.ok(taskAppService.search(request));
     }
 
     @GetMapping("/{id}")
-    @Operation(summary = "Task detail")
+    @Operation(summary = "任务详情")
     public ApiResponse<InternshipTask> detail(
-            @Parameter(description = "task id", required = true) @PathVariable("id") Long id) {
+            @Parameter(description = "任务ID", required = true) @PathVariable("id") Long id) {
         return ApiResponse.ok(taskAppService.detail(id));
     }
 
     @GetMapping("/hot")
-    @Operation(summary = "Task hot top10")
+    @Operation(summary = "热门任务 Top10")
     public ApiResponse<List<InternshipTask>> hot() {
         return ApiResponse.ok(taskAppService.hot());
+    }
+
+    // 接单
+    @PostMapping("/{id}/accept")
+    public ApiResponse acceptTask(@PathVariable("id") @NotNull Long id) {
+        taskAppService.acceptTask(id);
+        return ApiResponse.ok();
+    }
+
+    // TODO 提交完成结果(差真正的逻辑,暂时不知道怎么加入)
+    @PostMapping("/{id}/submit")
+    public ApiResponse submitTask(@PathVariable("id") @NotNull Long id) {
+        return ApiResponse.ok();
+    }
+
+    // TODO 发布方校验通过(差真正的逻辑)
+    @PostMapping("/{id}/approve")
+    public ApiResponse approveTask(@PathVariable("id") @NotNull Long id) {
+        return ApiResponse.ok();
+    }
+
+    // TODO 发布方驳回
+    @PostMapping("/{id}/reject")
+    public ApiResponse rejectTask(@PathVariable("id") @NotNull Long id) {
+        return ApiResponse.ok();
+    }
+
+    // 取消任务
+    @PostMapping("/{id}/cancel")
+    public ApiResponse<Void> cancelTask(@PathVariable Long id,
+                                    @RequestBody(required = false) CancelTaskRequest request) {
+        Long uid = requireLogin();
+        String reason = request == null ? null : request.getReason();
+        taskAppService.cancelTask(id, uid, reason);
+        return ApiResponse.ok();
+    }
+
+    // 当前用户发布的任务
+    @GetMapping("/mine/published")
+    public ApiResponse<IPage<InternshipTask>> publishedTasks(TaskQueryRequest request) {
+        Long uid = requireLogin();
+        return ApiResponse.ok(taskAppService.publishedTasks(uid, request));
+    }
+
+    // 用户接受的任务
+    @GetMapping("/mine/accept")
+    public ApiResponse<IPage<InternshipTask>> acceptedTasks(@RequestBody TaskQueryRequest request) {
+        Long uid = requireLogin();
+        return ApiResponse.ok(taskAppService.acceptedTasks(uid, request));
+    }
+
+    // 待用户验收的任务
+    @GetMapping("/mine/review")
+    public ApiResponse<IPage<InternshipTask>> reviewTasks(@RequestBody TaskQueryRequest request) {
+        Long uid = requireLogin();
+        return ApiResponse.ok(taskAppService.reviewTasks(uid, request));
     }
 
     private Long requireLogin() {
@@ -107,6 +168,7 @@ public class TaskController {
 
     private long usedTaskCount(Long uid) {
         return taskMapper.selectCount(new LambdaQueryWrapper<InternshipTask>()
-                .eq(InternshipTask::getOwnerId, uid));
+                .eq(InternshipTask::getPublisherId, uid)
+                .notIn(InternshipTask::getStatus, "CANCELLED", "SETTLED"));
     }
 }

@@ -1,45 +1,35 @@
 <template>
-  <section class="card">
-    <div class="page-head">
-      <div>
-        <p class="section-kicker">账户</p>
-        <h1>我的订单</h1>
-        <p class="muted">查看个人订单历史、当前状态，并可取消待支付订单。</p>
-      </div>
-      <div class="action-row action-row-start">
-        <RouterLink class="btn secondary" to="/orders/create">创建订单</RouterLink>
-        <RouterLink class="btn secondary" to="/payments">订单支付</RouterLink>
-      </div>
+  <section class="panel">
+    <div class="panel-head">
+      <p class="eyebrow">订单</p>
+      <h1>我的订单</h1>
+      <p class="muted">读取 `GET /api/orders/mine`，并允许取消待支付订单。</p>
     </div>
 
-    <p v-if="errorText" class="error mt12">{{ errorText }}</p>
-    <p v-if="successText" class="success mt12">{{ successText }}</p>
-
-    <div class="action-row mt12 action-row-start">
-      <button class="btn secondary" :disabled="loading" @click="loadOrders">
-        {{ loading ? "刷新中..." : "刷新订单" }}
-      </button>
+    <div class="button-row">
+      <button class="btn" @click="loadOrders" :disabled="loading">{{ loading ? "刷新中..." : "刷新订单" }}</button>
+      <RouterLink class="btn ghost" to="/orders/create">创建订单</RouterLink>
     </div>
 
-    <div v-if="orders.length" class="task-grid mt12">
-      <article v-for="item in orders" :key="item.orderNo" class="task-card">
+    <p v-if="errorText" class="error">{{ errorText }}</p>
+    <p v-if="successText" class="success">{{ successText }}</p>
+
+    <div class="list-grid" v-if="orders.length">
+      <article v-for="item in orders" :key="item.orderNo" class="list-card">
         <header>
           <h3>{{ item.orderNo }}</h3>
           <span class="tag">{{ statusLabel(item.status) }}</span>
         </header>
-        <p class="muted">SKU：{{ item.skuCode }}</p>
-        <p class="muted">数量：{{ item.quantity }}</p>
-        <p class="muted">金额：{{ formatAmount(item.amount) }}</p>
-        <p class="muted">创建时间：{{ item.createdAt || "-" }}</p>
-        <div class="action-row mt12 action-row-start">
-          <RouterLink v-if="item.status === 'PENDING_PAY'" class="btn secondary" :to="`/payments?orderNo=${item.orderNo}`">
-            去支付
-          </RouterLink>
-          <span v-else class="muted">当前状态不可支付</span>
+        <div class="meta-stack">
+          <div class="meta-row"><span>SKU</span><strong>{{ item.skuCode }}</strong></div>
+          <div class="meta-row"><span>数量</span><strong>{{ item.quantity }}</strong></div>
+          <div class="meta-row"><span>金额</span><strong>{{ formatAmount(item.amount) }}</strong></div>
+        </div>
+        <div class="button-row">
+          <RouterLink class="btn ghost" :to="`/payments?orderNo=${item.orderNo}`">去支付</RouterLink>
           <button
-            v-if="item.status === 'PENDING_PAY'"
-            class="btn secondary"
-            :disabled="cancelingOrderNo === item.orderNo"
+            class="btn ghost"
+            :disabled="item.status !== 'PENDING_PAY' || cancelingOrderNo === item.orderNo"
             @click="handleCancel(item.orderNo)"
           >
             {{ cancelingOrderNo === item.orderNo ? "取消中..." : "取消订单" }}
@@ -47,11 +37,7 @@
         </div>
       </article>
     </div>
-
-    <div v-else class="empty-state mt12">
-      <h3>暂时还没有订单</h3>
-      <p class="muted">先去创建订单页面生成第一笔订单。</p>
-    </div>
+    <p v-else class="muted">当前还没有订单。</p>
   </section>
 </template>
 
@@ -60,14 +46,16 @@ import { onMounted, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { cancelOrder, listMyOrders } from "../api/order";
 
+const orders = ref([]);
 const loading = ref(false);
-const cancelingOrderNo = ref("");
 const errorText = ref("");
 const successText = ref("");
-const orders = ref([]);
+const cancelingOrderNo = ref("");
+
+onMounted(loadOrders);
 
 function formatAmount(amount) {
-  return `CNY ${Number(amount).toFixed(2)}`;
+  return `¥${Number(amount).toFixed(2)}`;
 }
 
 function statusLabel(status) {
@@ -106,6 +94,4 @@ async function handleCancel(orderNo) {
     cancelingOrderNo.value = "";
   }
 }
-
-onMounted(loadOrders);
 </script>

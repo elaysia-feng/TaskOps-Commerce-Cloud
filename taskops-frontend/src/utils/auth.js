@@ -1,4 +1,4 @@
-﻿const TOKEN_KEY = "TASKOPS_TOKEN";
+const TOKEN_KEY = "TASKOPS_TOKEN";
 const USER_KEY = "TASKOPS_USER";
 
 export function getToken() {
@@ -7,7 +7,14 @@ export function getToken() {
 
 export function setAuth(auth) {
   localStorage.setItem(TOKEN_KEY, auth.token || "");
-  localStorage.setItem(USER_KEY, JSON.stringify(auth.user || {}));
+  localStorage.setItem(
+    USER_KEY,
+    JSON.stringify({
+      userId: auth.userId,
+      username: auth.username,
+      roles: auth.roles || []
+    })
+  );
 }
 
 export function getUser() {
