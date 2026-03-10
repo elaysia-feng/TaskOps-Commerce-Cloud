@@ -6,9 +6,7 @@ import com.elias.common.ApiResponse;
 import com.elias.common.context.UserContext;
 import com.elias.common.exception.BizException;
 import com.elias.common.exception.ErrorCode;
-import com.elias.task.dto.CancelTaskRequest;
-import com.elias.task.dto.CreateTaskRequest;
-import com.elias.task.dto.TaskQueryRequest;
+import com.elias.task.dto.*;
 import com.elias.task.entity.InternshipTask;
 import com.elias.task.mapper.InternshipTaskMapper;
 import com.elias.task.membership.MembershipLevel;
@@ -109,21 +107,28 @@ public class TaskController {
         return ApiResponse.ok();
     }
 
-    // TODO 提交完成结果(差真正的逻辑,暂时不知道怎么加入)
+    // TODO 提交完成结果(差真正的逻辑)
     @PostMapping("/{id}/submit")
-    public ApiResponse submitTask(@PathVariable("id") @NotNull Long id) {
+    public ApiResponse submitTask(@RequestBody SubmitTaskRequest submitTaskRequest, @PathVariable("id") @NotNull Long id) {
+        Long uid = requireLogin();
+        taskAppService.submitTask(id, uid, submitTaskRequest);
         return ApiResponse.ok();
     }
 
     // TODO 发布方校验通过(差真正的逻辑)
     @PostMapping("/{id}/approve")
     public ApiResponse approveTask(@PathVariable("id") @NotNull Long id) {
+        Long uid = requireLogin();
+        taskAppService.approveTask(id, uid);
         return ApiResponse.ok();
     }
 
     // TODO 发布方驳回
     @PostMapping("/{id}/reject")
-    public ApiResponse rejectTask(@PathVariable("id") @NotNull Long id) {
+    public ApiResponse rejectTask(@PathVariable("id") @NotNull Long id,
+                                  @RequestBody(required = false) RejectTaskRequest request) {
+        Long uid = requireLogin();
+        taskAppService.rejectTask(id, uid, request);
         return ApiResponse.ok();
     }
 

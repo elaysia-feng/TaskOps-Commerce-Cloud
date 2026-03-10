@@ -18,7 +18,7 @@ public class RabbitMqConfig {
 
     @Bean
     public Queue orderCreatedQueue() {
-        return new Queue(MqConstants.QUEUE_ORDER_CREATED_PAY, true);
+        return new Queue(MqConstants.QUEUE_ORDER_CREATED_PAY_CREATE, true);
     }
 
     @Bean

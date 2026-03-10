@@ -7,18 +7,24 @@ import com.elias.common.ApiResponse;
 import com.elias.common.context.UserContext;
 import com.elias.common.exception.BizException;
 import com.elias.common.exception.ErrorCode;
+import com.elias.common.mq.event.TaskRejectedEvent;
+import com.elias.common.mq.event.TaskSettlementRequestedEvent;
+import com.elias.common.mq.event.TaskSubmittedEvent;
 import com.elias.task.cache.CacheClient;
 import com.elias.task.client.AuthClient;
-import com.elias.task.config.UserContextConfig;
-import com.elias.task.dto.CreateTaskRequest;
-import com.elias.task.dto.TaskQueryRequest;
-import com.elias.task.dto.UserInfoDTO;
+
+import com.elias.task.dto.*;
 import com.elias.task.entity.InternshipTask;
+import com.elias.task.entity.TaskSettlement;
+import com.elias.task.entity.TaskSubmission;
 import com.elias.task.mapper.InternshipTaskMapper;
+import com.elias.task.mapper.TaskSettlementMapper;
+import com.elias.task.mapper.TaskSubmissionMapper;
+import com.elias.task.mq.producer.TaskEventProducer;
 import com.elias.task.service.TaskAppService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
+
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -54,9 +60,13 @@ public class TaskAppServiceImpl implements TaskAppService {
     private final StringRedisTemplate redisTemplate;
     private final AuthClient authClient;
     private final CacheClient cacheClient;
-
+    private final TaskSubmissionMapper taskSubmissionMapper;
+    private final TaskSettlementMapper taskSettlementMapper;
+    private final TaskEventProducer taskEventProducer;
     @Resource(name = "taskQueryExecutor")
     private Executor taskQueryExecutor;
+
+
 
     @Override
     public Long create(CreateTaskRequest request, Long ownerId) {
@@ -194,7 +204,9 @@ public class TaskAppServiceImpl implements TaskAppService {
         }
         task.setAcceptorId(UID);
         task.setAcceptedAt(LocalDateTime.now());
+        taskMapper.updateById(task);
     }
+
     //取消任务
     @Override
     public void cancelTask(Long id, Long uid, String reason) {
@@ -206,6 +218,7 @@ public class TaskAppServiceImpl implements TaskAppService {
         internshipTask.setCancelledAt(now);
         internshipTask.setCancelReason(reason);
         internshipTask.setStatus("CANCELLED");
+        taskMapper.updateById(internshipTask);
     }
     // 查询当前用户创建的任务
     public IPage<InternshipTask> publishedTasks(Long uid, TaskQueryRequest request) {
@@ -321,6 +334,186 @@ public class TaskAppServiceImpl implements TaskAppService {
                 .orderByDesc(InternshipTask::getSubmittedAt);
 
         return taskMapper.selectPage(page, wrapper);
+    }
+    // 用户提交任务
+    @Override
+    public void submitTask(Long id, Long uid, SubmitTaskRequest submitTaskRequest) {
+        InternshipTask task = taskMapper.selectById(id);
+        if (task == null) {
+            throw new BizException(ErrorCode.TASK_NOT_FOUND);
+        }
+        if (!uid.equals(task.getAcceptorId())) {
+            throw new BizException(4031, "only acceptor can submit task");
+        }
+        if (!"TAKEN".equals(task.getStatus())) {
+            throw new BizException(4101, "only taken task can be submitted");
+        }
+
+        Integer roundNo = taskSubmissionMapper.selectCount(
+                new LambdaQueryWrapper<TaskSubmission>()
+                        .eq(TaskSubmission::getTaskId, id)
+        ).intValue();
+
+
+        LocalDateTime now = LocalDateTime.now();
+
+        TaskSubmission submission = new TaskSubmission();
+        submission.setTaskId(id);
+        submission.setSubmitUserId(uid);
+        submission.setRoundNo((roundNo == null ? 0 : roundNo.intValue()) + 1);
+        submission.setStatus("SUBMITTED");
+        submission.setSubmittedAt(now);
+        submission.setCreatedAt(now);
+        submission.setUpdatedAt(now);
+        // TODO 后续接入 MinIO / OSS 后保存 proofUrls
+        submission.setProofUrls(submitTaskRequest.getProofUrls());
+        submission.setContent(submitTaskRequest.getContent());
+
+        taskSubmissionMapper.insert(submission);
+
+        task.setStatus("SUBMITTED");
+        task.setSubmittedAt(now);
+        task.setUpdatedAt(now);
+        taskMapper.updateById(task);
+
+        TaskSubmittedEvent taskSubmittedEvent = new TaskSubmittedEvent(
+                UUID.randomUUID().toString().replace("-", ""),
+                task.getId(),
+                submission.getId(),
+                task.getPublisherId(),
+                uid,
+                roundNo,
+                submitTaskRequest.getContent(),
+                submitTaskRequest.getProofUrls(),
+                now
+        );
+
+        // 把任务提交给队列,交给消费者消费
+        taskEventProducer.sendTaskSubmitted(taskSubmittedEvent);
+    }
+    //校验方通过
+    @Override
+    public void approveTask(Long id, Long uid) {
+        InternshipTask task = taskMapper.selectById(id);
+        if (task == null) {
+            throw new BizException(ErrorCode.TASK_NOT_FOUND);
+        }
+        if (!uid.equals(task.getPublisherId())) {
+            throw new BizException(4032, "only publisher can approve task");
+        }
+        if (!"SUBMITTED".equals(task.getStatus())) {
+            throw new BizException(4102, "only submitted task can be approved");
+        }
+
+        TaskSubmission latestSubmission = taskSubmissionMapper.selectOne(
+                new LambdaQueryWrapper<TaskSubmission>()
+                        .eq(TaskSubmission::getTaskId, id)
+                        .orderByDesc(TaskSubmission::getRoundNo)
+                        .last("limit 1")
+        );
+        if (latestSubmission == null) {
+            throw new BizException(4045, "task submission not found");
+        }
+        if (!"SUBMITTED".equals(latestSubmission.getStatus())) {
+            throw new BizException(4103, "latest submission is not in submitted status");
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+
+        latestSubmission.setStatus("APPROVED");
+        latestSubmission.setReviewedAt(now);
+        latestSubmission.setUpdatedAt(now);
+        taskSubmissionMapper.updateById(latestSubmission);
+
+        task.setStatus("SETTLEMENT_PENDING");
+        task.setApprovedAt(now);
+        task.setUpdatedAt(now);
+        taskMapper.updateById(task);
+
+        TaskSettlement settlement = new TaskSettlement();
+        settlement.setTaskId(task.getId());
+        settlement.setSubmissionId(latestSubmission.getId());
+        settlement.setPublisherId(task.getPublisherId());
+        settlement.setAcceptorId(task.getAcceptorId());
+        settlement.setSettleAmount(task.getSettleAmount());
+        settlement.setStatus("PENDING");
+        settlement.setMessageId(UUID.randomUUID().toString().replace("-", ""));
+        settlement.setCreatedAt(now);
+        settlement.setUpdatedAt(now);
+        taskSettlementMapper.insert(settlement);
+
+        // 发送 task.approved / task.settlement.requested MQ 消息
+        TaskSettlementRequestedEvent event = new TaskSettlementRequestedEvent(
+                settlement.getMessageId(),
+                settlement.getId(),
+                task.getId(),
+                latestSubmission.getId(),
+                task.getPublisherId(),
+                task.getAcceptorId(),
+                task.getTradeOrderNo(),
+                task.getSettleAmount(),
+                now
+        );
+        taskEventProducer.sendTaskSettlementRequested(event);
+    }
+    // 拒绝提交的任务
+    @Override
+    public void rejectTask(Long id, Long uid, RejectTaskRequest request) {
+        InternshipTask task = taskMapper.selectById(id);
+        if (task == null) {
+            throw new BizException(ErrorCode.TASK_NOT_FOUND);
+        }
+        if (!uid.equals(task.getPublisherId())) {
+            throw new BizException(4032, "only publisher can reject task");
+        }
+        if (!"SUBMITTED".equals(task.getStatus())) {
+            throw new BizException(4103, "only submitted task can be rejected");
+        }
+
+        TaskSubmission latestSubmission = taskSubmissionMapper.selectOne(
+                new LambdaQueryWrapper<TaskSubmission>()
+                        .eq(TaskSubmission::getTaskId, id)
+                        .orderByDesc(TaskSubmission::getRoundNo)
+                        .last("limit 1")
+        );
+        if (latestSubmission == null) {
+            throw new BizException(4045, "task submission not found");
+        }
+        if (!"SUBMITTED".equals(latestSubmission.getStatus())) {
+            throw new BizException(4104, "latest submission is not in submitted status");
+        }
+
+        String reason = request == null ? null : request.getReason();
+        if (!StringUtils.hasText(reason)) {
+            throw new BizException(4105, "reject reason can not be blank");
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+
+        latestSubmission.setStatus("REJECTED");
+        latestSubmission.setRejectReason(reason);
+        latestSubmission.setReviewedAt(now);
+        latestSubmission.setUpdatedAt(now);
+        taskSubmissionMapper.updateById(latestSubmission);
+
+        task.setStatus("TAKEN");
+        task.setRejectReason(reason);
+        task.setUpdatedAt(now);
+        taskMapper.updateById(task);
+
+        // TODO 发送 task.rejected 消息，通知接单方修改后重新提交
+        TaskRejectedEvent taskRejectedEvent = new TaskRejectedEvent(
+                UUID.randomUUID().toString().replace("-", ""),
+                task.getId(),
+                latestSubmission.getId(),
+                task.getPublisherId(),
+                task.getAcceptorId(),
+                latestSubmission.getRoundNo(),
+                reason,
+                now
+        );
+
+        taskEventProducer.sendTaskRejected(taskRejectedEvent);
     }
 
 

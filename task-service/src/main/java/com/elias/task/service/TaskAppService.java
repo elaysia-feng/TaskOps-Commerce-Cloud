@@ -2,10 +2,13 @@ package com.elias.task.service;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.elias.task.dto.CreateTaskRequest;
+import com.elias.task.dto.RejectTaskRequest;
+import com.elias.task.dto.SubmitTaskRequest;
 import com.elias.task.dto.TaskQueryRequest;
 import com.elias.task.entity.InternshipTask;
 
 import javax.validation.constraints.NotBlank;
+import javax.validation.constraints.NotNull;
 import java.util.List;
 /**
  * 文件说明： TaskAppService.
@@ -31,4 +34,10 @@ public interface TaskAppService {
     IPage<InternshipTask> acceptedTasks(Long uid, TaskQueryRequest request);
 
     IPage<InternshipTask> reviewTasks(Long uid, TaskQueryRequest request);
+
+    void submitTask(@NotNull Long id, Long uid, SubmitTaskRequest submitTaskRequest);
+
+    void approveTask(@NotNull Long id, Long uid);
+
+    void rejectTask(@NotNull Long id, Long uid, RejectTaskRequest request);
 }

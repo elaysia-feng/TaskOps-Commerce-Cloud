@@ -5,10 +5,6 @@ import com.elias.common.mq.event.PaySuccessEvent;
 import com.elias.order.service.OrderService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.amqp.core.ExchangeTypes;
-import org.springframework.amqp.rabbit.annotation.Exchange;
-import org.springframework.amqp.rabbit.annotation.Queue;
-import org.springframework.amqp.rabbit.annotation.QueueBinding;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 
@@ -17,8 +13,10 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class DirectListener {
 
-    @RabbitListener(queues =  MqConstants.QUEUE_PAY_SUCCESS_ORDER)
-    public void listenDirectQueue(PaySuccessEvent event) {
+    private final OrderService orderService;
+
+    @RabbitListener(queues = MqConstants.QUEUE_PAY_SUCCESS_ORDER_UPDATE)
+    public void listenPaySuccess(PaySuccessEvent event) {
         if (event == null || event.getOrderNo() == null) {
             log.warn("ignore invalid pay success event: {}", event);
             return;
@@ -26,6 +24,4 @@ public class DirectListener {
         orderService.markPaid(event.getOrderNo());
         log.info("consume pay.success, order marked paid, orderNo={}", event.getOrderNo());
     }
-
-    private final OrderService orderService;
 }

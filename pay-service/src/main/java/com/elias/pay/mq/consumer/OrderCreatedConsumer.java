@@ -15,7 +15,7 @@ public class OrderCreatedConsumer {
 
     private final PaymentService paymentService;
 
-    @RabbitListener(queues = MqConstants.QUEUE_ORDER_CREATED_PAY)
+    @RabbitListener(queues = MqConstants.QUEUE_ORDER_CREATED_PAY_CREATE)
     public void onOrderCreated(OrderCreatedEvent event) {
         if (event == null || event.getOrderNo() == null || event.getAmount() == null) {
             log.warn("ignore invalid order created event: {}", event);
