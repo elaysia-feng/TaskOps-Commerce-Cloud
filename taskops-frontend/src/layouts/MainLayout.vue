@@ -9,9 +9,12 @@
         <RouterLink to="/dashboard">首页总览</RouterLink>
         <RouterLink to="/tasks">任务大厅</RouterLink>
         <RouterLink to="/tasks/create">发布任务</RouterLink>
+        <RouterLink to="/tasks/accepted">我的接单</RouterLink>
+        <RouterLink to="/tasks/review">待我验收</RouterLink>
         <RouterLink to="/orders/create">创建订单</RouterLink>
         <RouterLink to="/payments">支付中心</RouterLink>
         <RouterLink to="/account/orders">我的订单</RouterLink>
+        <RouterLink to="/ai">AI 助手</RouterLink>
       </nav>
     </aside>
 

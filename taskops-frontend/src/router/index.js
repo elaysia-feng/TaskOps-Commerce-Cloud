@@ -9,6 +9,9 @@ import DashboardView from "../views/DashboardView.vue";
 import CreateOrderView from "../views/CreateOrderView.vue";
 import PaymentView from "../views/PaymentView.vue";
 import MyOrdersView from "../views/MyOrdersView.vue";
+import MyAcceptedTasksView from "../views/MyAcceptedTasksView.vue";
+import TaskReviewView from "../views/TaskReviewView.vue";
+import AiConsoleView from "../views/AiConsoleView.vue";
 import { getToken } from "../utils/auth";
 
 const routes = [
@@ -21,10 +24,13 @@ const routes = [
       { path: "dashboard", component: DashboardView },
       { path: "tasks", component: TaskListView },
       { path: "tasks/create", component: CreateTaskView },
+      { path: "tasks/accepted", component: MyAcceptedTasksView },
+      { path: "tasks/review", component: TaskReviewView },
       { path: "orders", redirect: "/orders/create" },
       { path: "orders/create", component: CreateOrderView },
       { path: "payments", component: PaymentView },
-      { path: "account/orders", component: MyOrdersView }
+      { path: "account/orders", component: MyOrdersView },
+      { path: "ai", component: AiConsoleView }
     ]
   },
   {

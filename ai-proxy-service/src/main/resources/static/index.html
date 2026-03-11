@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Proxy Console</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div class="shell">
+    <aside class="sidebar">
+        <p class="eyebrow">Feign Gateway Test</p>
+        <h1>AI Proxy Console</h1>
+        <p class="summary">这个页面由 <code>ai-proxy-service</code> 提供，所有请求都会先打到代理服务，再由 OpenFeign 转发到 Spring AI 服务。</p>
+
+        <section class="card">
+            <label class="label" for="historyType">History Type</label>
+            <div class="row">
+                <input id="historyType" class="field" value="chat" />
+                <button id="reloadBtn" class="ghost" type="button">刷新</button>
+            </div>
+        </section>
+
+        <section class="card">
+            <div class="section-head">
+                <div>
+                    <p class="eyebrow">Sessions</p>
+                    <h2>会话列表</h2>
+                </div>
+                <button id="createBtn" class="ghost" type="button">新会话</button>
+            </div>
+            <div id="sessionList" class="session-list"></div>
+        </section>
+    </aside>
+
+    <main class="main">
+        <section class="hero">
+            <div>
+                <p class="eyebrow">Proxy Status</p>
+                <h2>先验证微服务能不能调通 Spring AI</h2>
+            </div>
+            <div class="stats">
+                <div>
+                    <span class="stat-label">Current ChatId</span>
+                    <strong id="currentChatId">-</strong>
+                </div>
+                <div>
+                    <span class="stat-label">Status</span>
+                    <strong id="statusText">Ready</strong>
+                </div>
+            </div>
+        </section>
+
+        <section class="workspace">
+            <section class="chat-panel">
+                <div id="messages" class="messages">
+                    <article class="message assistant">
+                        <div class="message-role">assistant</div>
+                        <div class="bubble">先点“新会话”，再通过代理服务发送一条消息。</div>
+                    </article>
+                </div>
+                <form id="chatForm" class="composer">
+                    <label class="label" for="chatId">ChatId</label>
+                    <input id="chatId" class="field" placeholder="先点击新会话或选择左侧会话" />
+                    <label class="label" for="prompt">Prompt</label>
+                    <textarea id="prompt" rows="4" placeholder="例如：请用一句话解释什么是 OpenFeign"></textarea>
+                    <div class="actions">
+                        <button id="historyBtn" class="ghost" type="button">查看当前历史</button>
+                        <button id="sendBtn" class="primary" type="submit">发送到代理服务</button>
+                    </div>
+                </form>
+            </section>
+
+            <aside class="history-panel">
+                <div class="section-head">
+                    <div>
+                        <p class="eyebrow">Memory</p>
+                        <h2>当前会话历史</h2>
+                    </div>
+                </div>
+                <div id="historyMessages" class="history-messages"></div>
+            </aside>
+        </section>
+    </main>
+</div>
+<script src="/app.js"></script>
+</body>
+</html>

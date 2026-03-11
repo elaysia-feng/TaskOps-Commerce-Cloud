@@ -1,4 +1,4 @@
-﻿import { defineConfig } from "vite";
+import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 
 export default defineConfig({
@@ -10,6 +10,11 @@ export default defineConfig({
       "/api": {
         target: "http://localhost:8080",
         changeOrigin: true
+      },
+      "/ai-api": {
+        target: "http://localhost:8091",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/ai-api/, "/api")
       }
     }
   }

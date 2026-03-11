@@ -6,13 +6,13 @@ import lombok.Data;
 import javax.validation.constraints.NotBlank;
 
 @Data
-@Schema(name = "SubmitTaskRequest", description = "提交任务完成结果请求")
+@Schema(name = "SubmitTaskRequest", description = "提交任务请求")
 public class SubmitTaskRequest {
 
     @NotBlank
-    @Schema(description = "提交说明", required = true)
+    @Schema(description = "提交说明", example = "任务已完成，请验收")
     private String content;
 
-    @Schema(description = "提交凭证URL，多个值可用 JSON 字符串或逗号分隔")
+    @Schema(description = "提交凭证链接，后续可接入 MinIO 或 OSS")
     private String proofUrls;
 }

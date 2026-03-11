@@ -6,7 +6,11 @@ import com.elias.common.ApiResponse;
 import com.elias.common.context.UserContext;
 import com.elias.common.exception.BizException;
 import com.elias.common.exception.ErrorCode;
-import com.elias.task.dto.*;
+import com.elias.task.dto.CancelTaskRequest;
+import com.elias.task.dto.CreateTaskRequest;
+import com.elias.task.dto.RejectTaskRequest;
+import com.elias.task.dto.SubmitTaskRequest;
+import com.elias.task.dto.TaskQueryRequest;
 import com.elias.task.entity.InternshipTask;
 import com.elias.task.mapper.InternshipTaskMapper;
 import com.elias.task.membership.MembershipLevel;
@@ -18,10 +22,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.web.bind.annotation.*;
 
 import javax.validation.Valid;
-import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.NotNull;
-import java.awt.print.Pageable;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -100,65 +101,58 @@ public class TaskController {
         return ApiResponse.ok(taskAppService.hot());
     }
 
-    // 接单
     @PostMapping("/{id}/accept")
-    public ApiResponse acceptTask(@PathVariable("id") @NotNull Long id) {
+    public ApiResponse<Void> acceptTask(@PathVariable("id") @NotNull Long id) {
         taskAppService.acceptTask(id);
         return ApiResponse.ok();
     }
 
-    // TODO 提交完成结果(差真正的逻辑)
     @PostMapping("/{id}/submit")
-    public ApiResponse submitTask(@RequestBody SubmitTaskRequest submitTaskRequest, @PathVariable("id") @NotNull Long id) {
+    public ApiResponse<Void> submitTask(@RequestBody SubmitTaskRequest submitTaskRequest,
+                                        @PathVariable("id") @NotNull Long id) {
         Long uid = requireLogin();
         taskAppService.submitTask(id, uid, submitTaskRequest);
         return ApiResponse.ok();
     }
 
-    // TODO 发布方校验通过(差真正的逻辑)
     @PostMapping("/{id}/approve")
-    public ApiResponse approveTask(@PathVariable("id") @NotNull Long id) {
+    public ApiResponse<Void> approveTask(@PathVariable("id") @NotNull Long id) {
         Long uid = requireLogin();
         taskAppService.approveTask(id, uid);
         return ApiResponse.ok();
     }
 
-    // TODO 发布方驳回
     @PostMapping("/{id}/reject")
-    public ApiResponse rejectTask(@PathVariable("id") @NotNull Long id,
-                                  @RequestBody(required = false) RejectTaskRequest request) {
+    public ApiResponse<Void> rejectTask(@PathVariable("id") @NotNull Long id,
+                                        @RequestBody(required = false) RejectTaskRequest request) {
         Long uid = requireLogin();
         taskAppService.rejectTask(id, uid, request);
         return ApiResponse.ok();
     }
 
-    // 取消任务
     @PostMapping("/{id}/cancel")
     public ApiResponse<Void> cancelTask(@PathVariable Long id,
-                                    @RequestBody(required = false) CancelTaskRequest request) {
+                                        @RequestBody(required = false) CancelTaskRequest request) {
         Long uid = requireLogin();
         String reason = request == null ? null : request.getReason();
         taskAppService.cancelTask(id, uid, reason);
         return ApiResponse.ok();
     }
 
-    // 当前用户发布的任务
     @GetMapping("/mine/published")
     public ApiResponse<IPage<InternshipTask>> publishedTasks(TaskQueryRequest request) {
         Long uid = requireLogin();
         return ApiResponse.ok(taskAppService.publishedTasks(uid, request));
     }
 
-    // 用户接受的任务
     @GetMapping("/mine/accept")
-    public ApiResponse<IPage<InternshipTask>> acceptedTasks(@RequestBody TaskQueryRequest request) {
+    public ApiResponse<IPage<InternshipTask>> acceptedTasks(TaskQueryRequest request) {
         Long uid = requireLogin();
         return ApiResponse.ok(taskAppService.acceptedTasks(uid, request));
     }
 
-    // 待用户验收的任务
     @GetMapping("/mine/review")
-    public ApiResponse<IPage<InternshipTask>> reviewTasks(@RequestBody TaskQueryRequest request) {
+    public ApiResponse<IPage<InternshipTask>> reviewTasks(TaskQueryRequest request) {
         Long uid = requireLogin();
         return ApiResponse.ok(taskAppService.reviewTasks(uid, request));
     }

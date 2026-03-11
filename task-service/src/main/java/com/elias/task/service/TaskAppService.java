@@ -10,11 +10,10 @@ import com.elias.task.entity.InternshipTask;
 import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.NotNull;
 import java.util.List;
-/**
- * 文件说明： TaskAppService.
- * 组件职责： 项目中的通用组件。
- */
 
+/**
+ * Task 业务服务接口。
+ */
 public interface TaskAppService {
     Long create(CreateTaskRequest request, Long ownerId);
 
@@ -25,7 +24,6 @@ public interface TaskAppService {
     List<InternshipTask> hot();
 
     void acceptTask(@NotBlank Long id);
-
 
     void cancelTask(Long id, Long uid, String reason);
 

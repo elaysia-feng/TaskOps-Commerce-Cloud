@@ -19,7 +19,7 @@ public class TaskSubmittedNotificationConsumer {
             log.warn("ignore invalid task submitted event: {}", event);
             return;
         }
-        log.info("receive task submitted notification event, taskId={}, publisherId={}, submissionId={}",
+        log.info("接单成功 taskId={}, publisherId={}, submissionId={}",
                 event.getTaskId(), event.getPublisherId(), event.getSubmissionId());
         // TODO 后续在这里写站内信、待办提醒、短信或邮件通知逻辑。
     }

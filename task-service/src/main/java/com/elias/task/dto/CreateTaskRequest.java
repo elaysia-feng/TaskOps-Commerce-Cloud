@@ -2,12 +2,12 @@ package com.elias.task.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
-import org.springframework.format.annotation.DateTimeFormat;
 
 import javax.validation.constraints.DecimalMin;
 import javax.validation.constraints.Max;
 import javax.validation.constraints.Min;
 import javax.validation.constraints.NotBlank;
+import javax.validation.constraints.NotNull;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
@@ -16,42 +16,43 @@ import java.time.LocalDateTime;
 public class CreateTaskRequest {
 
     @NotBlank
-    @Schema(description = "任务标题", example = "校园跑腿代取快递")
+    @Schema(description = "任务标题", example = "帮忙取快递送宿舍")
     private String title;
 
     @NotBlank
-    @Schema(description = "任务描述", example = "今天18:00前帮我从菜鸟驿站取快递并送到宿舍")
+    @Schema(description = "任务描述", example = "今天17:30前从东区菜鸟驿站取件后送到3号宿舍楼。")
     private String description;
-
-    @Schema(description = "原技术栈字段，兼容旧前端输入，现映射为标签", example = "跑腿,校园,快递")
-    private String techStack;
-
-    @Min(1)
-    @Max(5)
-    @Schema(description = "优先级，1-5，数值越小优先级越高", example = "3")
-    private Integer priority;
 
     @Schema(description = "任务分类", example = "ERRAND")
     private String category;
 
-    @DecimalMin(value = "0.00")
-    @Schema(description = "任务赏金", example = "12.50")
-    private BigDecimal rewardAmount;
-
-    @DecimalMin(value = "0.00")
-    @Schema(description = "平台服务费", example = "0.50")
-    private BigDecimal serviceFee;
+    @Schema(description = "任务标签，多个用英文逗号分隔", example = "跑腿,快递,校园")
+    private String tags;
 
     @Schema(description = "任务地点", example = "东区菜鸟驿站")
     private String location;
 
-    @Schema(description = "联系方式", example = "微信: taskops001")
+    @Schema(description = "联系方式", example = "微信:test")
     private String contactInfo;
 
-    @Schema(description = "是否要求提交凭证", example = "true")
-    private Boolean proofRequired;
+    @NotNull
+    @DecimalMin(value = "0.01")
+    @Schema(description = "任务赏金", example = "18.80")
+    private BigDecimal rewardAmount;
 
-    @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss")
-    @Schema(description = "截止时间", example = "2026-03-10 18:00:00")
+    @DecimalMin(value = "0.00")
+    @Schema(description = "平台服务费", example = "0.80")
+    private BigDecimal serviceFee;
+
+    @NotNull
+    @Min(1)
+    @Max(5)
+    @Schema(description = "优先级，1最高，5最低", example = "3")
+    private Integer priority;
+
+    @Schema(description = "截止时间", example = "2026-03-10T18:40:00")
     private LocalDateTime deadline;
+
+    @Schema(description = "是否要求提交凭证", example = "false")
+    private Boolean proofRequired;
 }

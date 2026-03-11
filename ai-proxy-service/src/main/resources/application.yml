@@ -1,0 +1,16 @@
+server:
+  port: 8091
+
+spring:
+  application:
+    name: ai-proxy-service
+
+spring-ai:
+  service:
+    url: ${SPRING_AI_SERVICE_URL:http://localhost:8090}
+
+feign:
+  okhttp:
+    enabled: true
+  httpclient:
+    enabled: false

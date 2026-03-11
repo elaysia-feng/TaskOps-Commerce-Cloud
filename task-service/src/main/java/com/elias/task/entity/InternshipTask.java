@@ -33,7 +33,7 @@ public class InternshipTask {
     @Schema(description = "任务分类")
     private String category;
 
-    @Schema(description = "标签，兼容旧技术栈输入")
+    @Schema(description = "任务标签")
     private String tags;
 
     @Schema(description = "任务地点")
@@ -57,7 +57,7 @@ public class InternshipTask {
     @Schema(description = "优先级，数值越小优先级越高")
     private Integer priority;
 
-    @Schema(description = "状态 OPEN/TAKEN/SUBMITTED/APPROVED/REJECTED/SETTLED/CANCELLED")
+    @Schema(description = "状态 OPEN/TAKEN/SUBMITTED/SETTLEMENT_PENDING/SETTLED/CANCELLED")
     private String status;
 
     @Schema(description = "截止时间")
