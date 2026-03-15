@@ -1,0 +1,22 @@
+server:
+  port: 8087
+
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${TASKOPS_DB_URL:jdbc:mysql://${TASKOPS_MW_HOST:192.168.88.100}:3307/taskops_wallet?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&characterEncoding=utf8}
+    username: ${TASKOPS_DB_USER:root}
+    password: ${TASKOPS_DB_PASS:root}
+  data:
+    redis:
+      host: ${TASKOPS_REDIS_HOST:${TASKOPS_MW_HOST:192.168.88.100}}
+      port: ${TASKOPS_REDIS_PORT:6380}
+  cloud:
+    sentinel:
+      transport:
+        dashboard: ${TASKOPS_SENTINEL_DASHBOARD:localhost:8858}
+        port: ${TASKOPS_SENTINEL_CLIENT_PORT:8725}
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true

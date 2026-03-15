@@ -4,7 +4,7 @@ import com.elias.pay.entity.Payment;
 import com.elias.pay.vo.PayCreateVO;
 import com.elias.pay.vo.PayDetailVO;
 
-import javax.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotBlank;
 import java.math.BigDecimal;
 import java.util.Map;
 

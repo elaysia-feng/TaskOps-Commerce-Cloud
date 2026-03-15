@@ -5,6 +5,7 @@ import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.DirectExchange;
 import org.springframework.amqp.core.Queue;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -27,14 +28,18 @@ public class RabbitMqConfig {
     }
 
     @Bean
-    public Binding paySuccessOrderBinding(Queue paySuccessOrderUpdateQueue, DirectExchange businessExchange) {
+    public Binding paySuccessOrderBinding(
+            @Qualifier("paySuccessOrderUpdateQueue") Queue paySuccessOrderUpdateQueue,
+            DirectExchange businessExchange) {
         return BindingBuilder.bind(paySuccessOrderUpdateQueue)
                 .to(businessExchange)
                 .with(MqConstants.RK_PAY_SUCCESS);
     }
 
     @Bean
-    public Binding payFailOrderBinding(Queue payFailOrderUpdateQueue, DirectExchange businessExchange) {
+    public Binding payFailOrderBinding(
+            @Qualifier("payFailOrderUpdateQueue") Queue payFailOrderUpdateQueue,
+            DirectExchange businessExchange) {
         return BindingBuilder.bind(payFailOrderUpdateQueue)
                 .to(businessExchange)
                 .with(MqConstants.RK_PAY_FAIL);

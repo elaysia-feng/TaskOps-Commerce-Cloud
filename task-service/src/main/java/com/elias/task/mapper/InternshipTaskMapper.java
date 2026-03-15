@@ -4,7 +4,7 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.elias.task.entity.InternshipTask;
 import org.apache.ibatis.annotations.Mapper;
 
-import javax.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotBlank;
 
 /**
  * 文件说明： InternshipTaskMapper.

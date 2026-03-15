@@ -5,6 +5,7 @@ import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.DirectExchange;
 import org.springframework.amqp.core.Queue;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -27,16 +28,18 @@ public class RabbitMqConfig {
     }
 
     @Bean
-    public Binding settlementSucceededBinding(Queue settlementSucceededTaskUpdateQueue,
-                                              DirectExchange businessExchange) {
+    public Binding settlementSucceededBinding(
+            @Qualifier("settlementSucceededTaskUpdateQueue") Queue settlementSucceededTaskUpdateQueue,
+            DirectExchange businessExchange) {
         return BindingBuilder.bind(settlementSucceededTaskUpdateQueue)
                 .to(businessExchange)
                 .with(MqConstants.RK_TASK_SETTLEMENT_SUCCEEDED);
     }
 
     @Bean
-    public Binding settlementFailedBinding(Queue settlementFailedTaskUpdateQueue,
-                                           DirectExchange businessExchange) {
+    public Binding settlementFailedBinding(
+            @Qualifier("settlementFailedTaskUpdateQueue") Queue settlementFailedTaskUpdateQueue,
+            DirectExchange businessExchange) {
         return BindingBuilder.bind(settlementFailedTaskUpdateQueue)
                 .to(businessExchange)
                 .with(MqConstants.RK_TASK_SETTLEMENT_FAILED);
