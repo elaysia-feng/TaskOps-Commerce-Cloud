@@ -1,4 +1,4 @@
-package com.elias.aiproxy.service.impl;
+package com.elias.aiproxy.service.Impl;
 
 import com.elias.aiproxy.dto.req.CreateSessionRequest;
 import com.elias.aiproxy.dto.req.SessionMemorySelectRequest;
@@ -14,8 +14,11 @@ import com.elias.aiproxy.mapper.AiSessionMemoryRelMapper;
 import com.elias.aiproxy.service.AiSessionService;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
+import java.util.UUID;
+
 
 @Service
 public class AiSessionServiceImpl implements AiSessionService {
@@ -37,7 +40,23 @@ public class AiSessionServiceImpl implements AiSessionService {
 
     @Override
     public CreateSessionResponse createSession(Long userId, CreateSessionRequest request) {
-        throw new UnsupportedOperationException("TODO: 实现创建会话逻辑");
+        String chatId = UUID.randomUUID().toString().replace("-", "");
+        LocalDateTime now = LocalDateTime.now();
+
+        AiSession session = new AiSession();
+        session.setChatId(chatId);
+        session.setUserId(userId);
+        session.setTitle("新对话");
+        session.setSessionType(defaultIfBlank(request == null ? null : request.getSessionType(), "chat"));
+        session.setModelName(defaultIfBlank(request == null ? null : request.getModelName(), "qwen-plus"));
+        session.setMemoryEnabled(request == null || request.getMemoryEnabled() == null ? 1 : request.getMemoryEnabled());
+        session.setStatus(1);
+        session.setLastMessageAt(now);
+        session.setCreatedAt(now);
+        session.setUpdatedAt(now);
+
+        aiSessionMapper.insert(session);
+        return new CreateSessionResponse(chatId);
     }
 
     @Override
@@ -63,5 +82,9 @@ public class AiSessionServiceImpl implements AiSessionService {
     @Override
     public AiSession requireOwnedSession(Long userId, String chatId) {
         throw new UnsupportedOperationException("TODO: 实现会话归属校验逻辑");
+    }
+
+    private String defaultIfBlank(String value, String defaultValue) {
+        return value == null || value.trim().isEmpty() ? defaultValue : value.trim();
     }
 }
