@@ -44,7 +44,7 @@ public class TaskController {
         this.taskQuotaService = taskQuotaService;
     }
 
-    @PostMapping
+    @PostMapping("/create")
     @Operation(summary = "创建任务")
     public ApiResponse<Long> create(@Valid @RequestBody CreateTaskRequest request) {
         Long uid = requireLogin();
@@ -114,6 +114,7 @@ public class TaskController {
         taskAppService.submitTask(id, uid, submitTaskRequest);
         return ApiResponse.ok();
     }
+
 
     @PostMapping("/{id}/approve")
     public ApiResponse<Void> approveTask(@PathVariable("id") @NotNull Long id) {

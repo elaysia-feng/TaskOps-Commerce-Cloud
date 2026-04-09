@@ -12,6 +12,7 @@ import com.elias.aiproxy.mapper.AiMessageMapper;
 import com.elias.aiproxy.mapper.AiSessionMapper;
 import com.elias.aiproxy.mapper.AiSessionMemoryRelMapper;
 import com.elias.aiproxy.service.AiSessionService;
+import lombok.Data;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -19,9 +20,12 @@ import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
-
 @Service
 public class AiSessionServiceImpl implements AiSessionService {
+
+    private static final String DEFAULT_CHAT_TITLE = "New Chat";
+    private static final String DEFAULT_SESSION_TYPE = "chat";
+    private static final String DEFAULT_MODEL_NAME = "qwen-plus";
 
     private final AiSessionMapper aiSessionMapper;
     private final AiMessageMapper aiMessageMapper;
@@ -40,23 +44,9 @@ public class AiSessionServiceImpl implements AiSessionService {
 
     @Override
     public CreateSessionResponse createSession(Long userId, CreateSessionRequest request) {
-        String chatId = UUID.randomUUID().toString().replace("-", "");
-        LocalDateTime now = LocalDateTime.now();
-
-        AiSession session = new AiSession();
-        session.setChatId(chatId);
-        session.setUserId(userId);
-        session.setTitle("新对话");
-        session.setSessionType(defaultIfBlank(request == null ? null : request.getSessionType(), "chat"));
-        session.setModelName(defaultIfBlank(request == null ? null : request.getModelName(), "qwen-plus"));
-        session.setMemoryEnabled(request == null || request.getMemoryEnabled() == null ? 1 : request.getMemoryEnabled());
-        session.setStatus(1);
-        session.setLastMessageAt(now);
-        session.setCreatedAt(now);
-        session.setUpdatedAt(now);
-
-        aiSessionMapper.insert(session);
-        return new CreateSessionResponse(chatId);
+        CreateSessionContext context = prepareCreateSessionContext(userId, request);
+        executeSessionCreation(context);
+        return buildCreateSessionResponse(context);
     }
 
     @Override
@@ -76,15 +66,51 @@ public class AiSessionServiceImpl implements AiSessionService {
 
     @Override
     public void changeMemorySelection(Long userId, SessionMemorySelectRequest request) {
-        throw new UnsupportedOperationException("TODO: 实现会话记忆勾选逻辑");
+        throw new UnsupportedOperationException("TODO: implement session memory selection");
     }
 
     @Override
     public AiSession requireOwnedSession(Long userId, String chatId) {
-        throw new UnsupportedOperationException("TODO: 实现会话归属校验逻辑");
+        throw new UnsupportedOperationException("TODO: implement session ownership validation");
+    }
+
+    private CreateSessionContext prepareCreateSessionContext(Long userId, CreateSessionRequest request) {
+        String chatId = UUID.randomUUID().toString().replace("-", "");
+        LocalDateTime now = LocalDateTime.now();
+
+        AiSession session = new AiSession();
+        session.setChatId(chatId);
+        session.setUserId(userId);
+        session.setTitle(DEFAULT_CHAT_TITLE);
+        session.setSessionType(defaultIfBlank(request == null ? null : request.getSessionType(), DEFAULT_SESSION_TYPE));
+        session.setModelName(defaultIfBlank(request == null ? null : request.getModelName(), DEFAULT_MODEL_NAME));
+        session.setMemoryEnabled(request == null || request.getMemoryEnabled() == null ? 1 : request.getMemoryEnabled());
+        session.setStatus(1);
+        session.setLastMessageAt(now);
+        session.setCreatedAt(now);
+        session.setUpdatedAt(now);
+
+        CreateSessionContext context = new CreateSessionContext();
+        context.setChatId(chatId);
+        context.setSession(session);
+        return context;
+    }
+
+    private void executeSessionCreation(CreateSessionContext context) {
+        aiSessionMapper.insert(context.getSession());
+    }
+
+    private CreateSessionResponse buildCreateSessionResponse(CreateSessionContext context) {
+        return new CreateSessionResponse(context.getChatId());
     }
 
     private String defaultIfBlank(String value, String defaultValue) {
         return value == null || value.trim().isEmpty() ? defaultValue : value.trim();
+    }
+
+    @Data
+    private static class CreateSessionContext {
+        private String chatId;
+        private AiSession session;
     }
 }

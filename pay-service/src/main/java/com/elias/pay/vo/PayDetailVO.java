@@ -4,6 +4,7 @@ import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Map;
 
 @Data
 public class PayDetailVO {
@@ -16,4 +17,5 @@ public class PayDetailVO {
     private String thirdTradeNo;
     private String buyerId;
     private LocalDateTime payTime;
+    private Map<String, Object> payParams;
 }

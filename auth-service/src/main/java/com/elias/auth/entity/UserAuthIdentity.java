@@ -3,26 +3,32 @@ package com.elias.auth.entity;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
-import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
 import java.time.LocalDateTime;
 
 @Data
-@TableName("auth_user_role")
-@Schema(name = "UserRole", description = "User role relation")
-public class UserRole {
+@TableName("user_auth_identity")
+public class UserAuthIdentity {
 
     @TableId(type = IdType.AUTO)
-    @Schema(description = "Primary key")
     private Long id;
 
-    @Schema(description = "User ID")
     private Long userId;
 
-    @Schema(description = "Role ID")
-    private Long roleId;
+    private String identityType;
 
-    @Schema(description = "Created at")
+    private String principal;
+
+    private String credentialHash;
+
+    private Integer credentialVersion;
+
+    private String status;
+
+    private LocalDateTime lastVerifiedAt;
+
     private LocalDateTime createdAt;
+
+    private LocalDateTime updatedAt;
 }

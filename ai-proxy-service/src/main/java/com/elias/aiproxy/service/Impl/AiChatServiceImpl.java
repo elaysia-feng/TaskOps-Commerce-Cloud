@@ -12,17 +12,20 @@ import com.elias.aiproxy.mapper.AiSessionMemoryRelMapper;
 import com.elias.aiproxy.mapper.AiToolCallLogMapper;
 import com.elias.aiproxy.service.AiChatService;
 import com.elias.aiproxy.tool.TaskOpsTools;
+import lombok.Data;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
 import java.time.LocalDateTime;
-import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
 @Service
 public class AiChatServiceImpl implements AiChatService {
+
+    private static final String DEFAULT_CHAT_TITLE = "New Chat";
+    private static final String DEFAULT_MODEL_NAME = "qwen-flash";
 
     private final ChatClient chatClient;
     private final AiSessionMapper aiSessionMapper;
@@ -47,70 +50,42 @@ public class AiChatServiceImpl implements AiChatService {
 
     @Override
     public AiChatPrepareResponse prepareChat(Long userId, AiChatRequest request) {
-        // 验证会话内容是否为空
-        validatePrompt(request);
-        // 检验会话id是否为空
-        String chatId = trimToNull(request.getChatId());
+        validatePromptRequest(request);
+        String chatId = resolveChatId(request);
         if (chatId != null) {
-            // 根据useId和会话id查询
-            AiSession session = requireOwnedSession(userId, chatId);
-            return new AiChatPrepareResponse(session.getChatId(), session.getTitle(), 0);
+            AiSession session = loadOwnedSession(userId, chatId);
+            return buildPreparedChatResponse(session, 0);
         }
-        // 创建新的会话
         return createPendingSession(userId);
     }
 
     @Override
     public Flux<String> streamChat(Long userId, AiChatRequest request) {
-        // 验证会话内容是否为空
-        validatePrompt(request);
-        // 准备对话
-        AiChatPrepareResponse prepared = prepareChat(userId, request);
-        String chatId = prepared.getChatId();
-        String prompt = request.getPrompt().trim();
-        // 查询会话
-        AiSession session = requireOwnedSession(userId, chatId);
-        LocalDateTime now = LocalDateTime.now();
-        /*
-         * 保存信息
-         * nextSeqNo -> 查询有多少会话条数, 然后返回记录条数
-         */
-        saveMessage(chatId, "user", prompt, nextSeqNo(chatId), session.getModelName(), now);
-        // 更新会话session里面的跟新时间这些
-        touchSession(session, now);
-        // 这个是为了在 Flux 流式回调里“累计 AI 的完整回复内容”
-        AtomicReference<StringBuilder> assistantReplyRef = new AtomicReference<>(new StringBuilder());
+        validatePromptRequest(request);
+        StreamChatContext context = prepareStreamChatContext(userId, request);
+        saveUserMessage(context);
+        touchSession(context.getSession(), context.getUserMessageAt());
+        return streamAssistantReply(context);
+    }
 
-        return chatClient.prompt()
-                .user(prompt)
-                .advisors(spec -> spec.param(ChatMemory.CONVERSATION_ID, chatId))
-                .tools(taskOpsTools)
-                .stream()
-                .content()
-                //.doOnNext(...)：每收到一小段流式内容时做点事
-                //
-                //.doOnComplete(...)：整个流结束时做点事
-                .doOnNext(chunk -> assistantReplyRef.get().append(chunk))
-                .doOnComplete(() -> {
-                    //拿到的就是“AI 这一次完整回复的最终文本”
-                    String assistantReply = assistantReplyRef.get().toString().trim();
-                    LocalDateTime finishedAt = LocalDateTime.now();
-                    saveMessage(chatId, "assistant", assistantReply, nextSeqNo(chatId), session.getModelName(), finishedAt);
-                    touchSession(session, finishedAt);
-                    updateTitleIfNeeded(session, prompt, assistantReply);
-                });
+    private String resolveChatId(AiChatRequest request) {
+        return trimToNull(request.getChatId());
+    }
+
+    private AiChatPrepareResponse buildPreparedChatResponse(AiSession session, Integer newlyCreated) {
+        return new AiChatPrepareResponse(session.getChatId(), session.getTitle(), newlyCreated);
     }
 
     private AiChatPrepareResponse createPendingSession(Long userId) {
-        String chatId = UUID.randomUUID().toString().replace("-", "");
+        String chatId = java.util.UUID.randomUUID().toString().replace("-", "");
         LocalDateTime now = LocalDateTime.now();
 
         AiSession session = new AiSession();
         session.setChatId(chatId);
         session.setUserId(userId);
-        session.setTitle("新对话");
+        session.setTitle(DEFAULT_CHAT_TITLE);
         session.setSessionType("chat");
-        session.setModelName("qwen-flash");
+        session.setModelName(DEFAULT_MODEL_NAME);
         session.setMemoryEnabled(1);
         session.setStatus(1);
         session.setLastMessageAt(now);
@@ -118,17 +93,68 @@ public class AiChatServiceImpl implements AiChatService {
         session.setUpdatedAt(now);
         aiSessionMapper.insert(session);
 
-        return new AiChatPrepareResponse(chatId, session.getTitle(), 1);
+        return buildPreparedChatResponse(session, 1);
     }
 
-    private AiSession requireOwnedSession(Long userId, String chatId) {
+    private StreamChatContext prepareStreamChatContext(Long userId, AiChatRequest request) {
+        AiChatPrepareResponse prepared = prepareChat(userId, request);
+        AiSession session = loadOwnedSession(userId, prepared.getChatId());
+
+        StreamChatContext context = new StreamChatContext();
+        context.setChatId(prepared.getChatId());
+        context.setPrompt(request.getPrompt().trim());
+        context.setSession(session);
+        context.setUserMessageAt(LocalDateTime.now());
+        context.setAssistantReplyRef(new AtomicReference<>(new StringBuilder()));
+        return context;
+    }
+
+    private void saveUserMessage(StreamChatContext context) {
+        saveMessage(
+                context.getChatId(),
+                "user",
+                context.getPrompt(),
+                nextSeqNo(context.getChatId()),
+                context.getSession().getModelName(),
+                context.getUserMessageAt()
+        );
+    }
+
+    private Flux<String> streamAssistantReply(StreamChatContext context) {
+        return chatClient.prompt()
+                .user(context.getPrompt())
+                .advisors(spec -> spec.param(ChatMemory.CONVERSATION_ID, context.getChatId()))
+                .tools(taskOpsTools)
+                .stream()
+                .content()
+                .doOnNext(chunk -> context.getAssistantReplyRef().get().append(chunk))
+                .doOnComplete(() -> handleAssistantReplyCompleted(context));
+    }
+
+    private void handleAssistantReplyCompleted(StreamChatContext context) {
+        String assistantReply = context.getAssistantReplyRef().get().toString().trim();
+        LocalDateTime finishedAt = LocalDateTime.now();
+
+        saveMessage(
+                context.getChatId(),
+                "assistant",
+                assistantReply,
+                nextSeqNo(context.getChatId()),
+                context.getSession().getModelName(),
+                finishedAt
+        );
+        touchSession(context.getSession(), finishedAt);
+        updateTitleIfNeeded(context.getSession(), context.getPrompt(), assistantReply);
+    }
+
+    private AiSession loadOwnedSession(Long userId, String chatId) {
         AiSession session = aiSessionMapper.selectOne(new LambdaQueryWrapper<AiSession>()
                 .eq(AiSession::getChatId, chatId)
                 .eq(AiSession::getUserId, userId)
                 .eq(AiSession::getStatus, 1)
                 .last("limit 1"));
         if (session == null) {
-            throw new IllegalArgumentException("会话不存在或无权访问");
+            throw new IllegalArgumentException("chat session not found or access denied");
         }
         return session;
     }
@@ -155,7 +181,6 @@ public class AiChatServiceImpl implements AiChatService {
     }
 
     private Integer nextSeqNo(String chatId) {
-        // 查当前会话有多少条消息
         Long count = aiMessageMapper.selectCount(new LambdaQueryWrapper<AiMessage>()
                 .eq(AiMessage::getChatId, chatId));
         return count == null ? 1 : count.intValue() + 1;
@@ -175,6 +200,7 @@ public class AiChatServiceImpl implements AiChatService {
         if (!isDefaultTitle(session.getTitle()) || answer == null || answer.isBlank()) {
             return;
         }
+
         String title = generateTitleByAi(prompt, answer);
         AiSession update = new AiSession();
         update.setId(session.getId());
@@ -185,41 +211,47 @@ public class AiChatServiceImpl implements AiChatService {
     }
 
     private boolean isDefaultTitle(String title) {
-        return title == null || title.trim().isEmpty() || "新对话".equals(title.trim());
+        return title == null || title.trim().isEmpty() || DEFAULT_CHAT_TITLE.equals(title.trim());
     }
 
     private String generateTitleByAi(String prompt, String answer) {
         String raw = chatClient.prompt()
                 .system(TaskAiContents.TITLE_PROMPT)
-                .user("用户问题：\n" + prompt + "\n\n助手回答：\n" + answer)
+                .user("User prompt:\n" + prompt + "\n\nAssistant answer:\n" + answer)
                 .call()
                 .content();
         if (raw == null || raw.trim().isEmpty()) {
-            return "新对话";
+            return DEFAULT_CHAT_TITLE;
         }
 
         String title = raw.trim()
                 .replace("\n", "")
                 .replace("\r", "")
-                .replace("：", "")
                 .replace(":", "");
         return title.length() > 12 ? title.substring(0, 12) : title;
     }
 
-    // 验证问题是否为空
-    private void validatePrompt(AiChatRequest request) {
-        if (request == null || request.getPrompt() == null || request.getPrompt().trim().isEmpty()) {
-            throw new IllegalArgumentException("prompt不能为空");
+    private void validatePromptRequest(AiChatRequest request) {
+        if (request == null || trimToNull(request.getPrompt()) == null) {
+            throw new IllegalArgumentException("prompt can not be blank");
         }
     }
 
-    // 校验值是否为空
     private String trimToNull(String value) {
         if (value == null) {
             return null;
         }
-        // 去掉字符串首尾的空白字符
+
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    @Data
+    private static class StreamChatContext {
+        private String chatId;
+        private String prompt;
+        private AiSession session;
+        private LocalDateTime userMessageAt;
+        private AtomicReference<StringBuilder> assistantReplyRef;
     }
 }

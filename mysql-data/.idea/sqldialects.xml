@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="SqlDialectMappings">
+    <file url="file://D:/java_Study/【项目课程】秒杀项目/02资料/数据库sql/seckill_general_order.sql" dialect="MySQL" />
+    <file url="file://D:/java_Study/【项目课程】秒杀项目/02资料/数据库sql/seckill_goods.sql" dialect="MySQL" />
+    <file url="file://D:/java_Study/【项目课程】秒杀项目/02资料/数据库sql/seckill_manager.sql" dialect="MySQL" />
+    <file url="file://D:/java_Study/【项目课程】秒杀项目/02资料/数据库sql/seckill_user.sql" dialect="MySQL" />
+    <file url="file://$PROJECT_DIR$/../../ai-agent-market/sql/init.sql" dialect="MySQL" />
+    <file url="file://$PROJECT_DIR$/../sql/taskops_v2_seed.sql" dialect="MySQL" />
+    <file url="file://F:/data/_vestibular_full_delivery-2026_03_26_10_34_59-dump.sql" dialect="MySQL" />
+    <file url="file://F:/data/_vestibular_full_delivery-2026_04_09_09_12_03-dump.sql" dialect="MySQL" />
+  </component>
+</project>

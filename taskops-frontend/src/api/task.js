@@ -40,6 +40,10 @@ export function rejectTask(id, data) {
   return http.post(`/tasks/${id}/reject`, data);
 }
 
+export function cancelTask(id, data) {
+  return http.post(`/tasks/${id}/cancel`, data);
+}
+
 export function getPublishedTasks(params) {
   return http.get("/tasks/mine/published", { params });
 }

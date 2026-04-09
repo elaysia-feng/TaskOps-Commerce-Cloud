@@ -25,18 +25,17 @@ import com.elias.task.mapper.TaskSettlementMapper;
 import com.elias.task.mapper.TaskSubmissionMapper;
 import com.elias.task.mq.producer.TaskEventProducer;
 import com.elias.task.service.TaskAppService;
+import jakarta.annotation.Resource;
+import lombok.Data;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
-import jakarta.annotation.Resource;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
@@ -44,12 +43,9 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 @Service
-@Transactional
-@Slf4j
 @RequiredArgsConstructor
 public class TaskAppServiceImpl implements TaskAppService {
 
@@ -70,17 +66,136 @@ public class TaskAppServiceImpl implements TaskAppService {
     private Executor taskQueryExecutor;
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public Long create(CreateTaskRequest request, Long ownerId) {
-        ApiResponse<UserInfoDTO> userInfoResp = authClient.userInfo(ownerId);
-        if (userInfoResp == null || userInfoResp.getData() == null) {
-            throw new BizException(4004, "publisher not found via auth-service");
-        }
+        validateCreateTaskRequest(request);
+        CreateTaskContext context = prepareCreateTaskContext(request, ownerId);
+        executeTaskCreation(context);
+        return buildCreatedTaskId(context);
+    }
 
+    @Override
+    public IPage<InternshipTask> search(TaskQueryRequest request) {
+        TaskQueryRequest query = normalizeTaskQueryRequest(request);
+        Page<InternshipTask> page = buildTaskPage(query);
+        LambdaQueryWrapper<InternshipTask> wrapper = buildSearchTaskWrapper(query);
+        return taskMapper.selectPage(page, wrapper);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public InternshipTask detail(Long id) {
+        InternshipTask task = loadTaskById(id);
+        refreshTaskDetailStats(task);
+        refreshHotTaskCache(task);
+        return task;
+    }
+
+    @Override
+    public List<InternshipTask> hot() {
+        List<Long> hotTaskIds = loadHotTaskIds();
+        return loadHotTasks(hotTaskIds);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void acceptTask(Long id) {
+        InternshipTask task = loadTaskById(id);
+        Long currentUserId = requireCurrentUserId();
+        validateTaskAcceptance(task);
+        markTaskAccepted(task, currentUserId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void cancelTask(Long id, Long uid, String reason) {
+        InternshipTask task = loadTaskById(id);
+        validateTaskCancellation(task, uid);
+        markTaskCancelled(task, reason);
+    }
+
+    @Override
+    public IPage<InternshipTask> publishedTasks(Long uid, TaskQueryRequest request) {
+        TaskQueryRequest query = normalizeTaskQueryRequest(request);
+        Page<InternshipTask> page = buildTaskPage(query);
+        LambdaQueryWrapper<InternshipTask> wrapper = buildPublishedTaskWrapper(uid, query);
+        return taskMapper.selectPage(page, wrapper);
+    }
+
+    @Override
+    public IPage<InternshipTask> acceptedTasks(Long uid, TaskQueryRequest request) {
+        TaskQueryRequest query = normalizeTaskQueryRequest(request);
+        Page<InternshipTask> page = buildTaskPage(query);
+        LambdaQueryWrapper<InternshipTask> wrapper = buildAcceptedTaskWrapper(uid, query);
+        return taskMapper.selectPage(page, wrapper);
+    }
+
+    @Override
+    public IPage<InternshipTask> reviewTasks(Long uid, TaskQueryRequest request) {
+        TaskQueryRequest query = normalizeTaskQueryRequest(request);
+        Page<InternshipTask> page = buildTaskPage(query);
+        LambdaQueryWrapper<InternshipTask> wrapper = buildReviewTaskWrapper(uid);
+        return taskMapper.selectPage(page, wrapper);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void submitTask(Long id, Long uid, SubmitTaskRequest submitTaskRequest) {
+        validateSubmitTaskRequest(submitTaskRequest);
+        SubmitTaskContext context = prepareSubmitTaskContext(id, uid, submitTaskRequest);
+        executeTaskSubmission(context);
+        handleAfterTaskSubmitted(context);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void approveTask(Long id, Long uid) {
+        ApproveTaskContext context = prepareApproveTaskContext(id, uid);
+        validateTaskApproval(context);
+        executeTaskApproval(context);
+        handleAfterTaskApproved(context);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void rejectTask(Long id, Long uid, RejectTaskRequest request) {
+        RejectTaskContext context = prepareRejectTaskContext(id, uid, request);
+        validateTaskRejection(context);
+        executeTaskRejection(context);
+        handleAfterTaskRejected(context);
+    }
+
+    @Scheduled(cron = "0 */5 * * * ?")
+    public void rebuildHot() {
+        List<InternshipTask> hotCandidates = loadHotCandidateTasks();
+        refreshHotRanking(hotCandidates);
+    }
+
+    private void validateCreateTaskRequest(CreateTaskRequest request) {
+        if (request == null) {
+            throw new BizException(4001, "create task request can not be null");
+        }
         if (request.getDeadline() != null && request.getDeadline().isBefore(LocalDateTime.now())) {
             throw new BizException(4107, "deadline must be in the future");
         }
+    }
+
+    private CreateTaskContext prepareCreateTaskContext(CreateTaskRequest request, Long ownerId) {
+        ApiResponse<UserInfoDTO> userInfoResp = authClient.userInfo(ownerId);
+        if (userInfoResp == null || userInfoResp.getData() == null) {
+            throw new BizException(ErrorCode.OWNER_NOT_FOUND);
+        }
 
         LocalDateTime now = LocalDateTime.now();
+        CreateTaskContext context = new CreateTaskContext();
+        context.setRequest(request);
+        context.setOwnerId(ownerId);
+        context.setOwnerInfo(userInfoResp.getData());
+        context.setTask(buildCreatedTask(request, ownerId, now));
+        return context;
+    }
+
+    private InternshipTask buildCreatedTask(CreateTaskRequest request, Long ownerId, LocalDateTime now) {
         InternshipTask task = new InternshipTask();
         task.setPublisherId(ownerId);
         task.setAcceptorId(null);
@@ -90,10 +205,10 @@ public class TaskAppServiceImpl implements TaskAppService {
         task.setTags(request.getTags());
         task.setLocation(request.getLocation());
         task.setContactInfo(request.getContactInfo());
-        task.setRewardAmount(defaultAmount(request.getRewardAmount()));
-        task.setServiceFee(defaultAmount(request.getServiceFee()));
-        task.setSettleAmount(defaultAmount(task.getRewardAmount().subtract(task.getServiceFee())));
-        task.setTradeOrderNo("TRD" + System.currentTimeMillis() + UUID.randomUUID().toString().substring(0, 6).toUpperCase());
+        task.setRewardAmount(normalizeAmount(request.getRewardAmount()));
+        task.setServiceFee(normalizeAmount(request.getServiceFee()));
+        task.setSettleAmount(normalizeAmount(task.getRewardAmount().subtract(task.getServiceFee())));
+        task.setTradeOrderNo(generateTradeOrderNo());
         task.setPriority(request.getPriority() == null ? 3 : request.getPriority());
         task.setStatus("OPEN");
         task.setDeadline(request.getDeadline());
@@ -103,37 +218,69 @@ public class TaskAppServiceImpl implements TaskAppService {
         task.setQualityScore(0);
         task.setCreatedAt(now);
         task.setUpdatedAt(now);
-
-        taskMapper.insert(task);
-        return task.getId();
+        return task;
     }
 
-    @Override
-    public IPage<InternshipTask> search(TaskQueryRequest request) {
-        TaskQueryRequest query = request == null ? new TaskQueryRequest() : request;
-        Page<InternshipTask> page = new Page<>(Math.max(1, query.getPage()), Math.max(1, Math.min(50, query.getSize())));
+    private void executeTaskCreation(CreateTaskContext context) {
+        taskMapper.insert(context.getTask());
+    }
 
+    private Long buildCreatedTaskId(CreateTaskContext context) {
+        return context.getTask().getId();
+    }
+
+    private TaskQueryRequest normalizeTaskQueryRequest(TaskQueryRequest request) {
+        return request == null ? new TaskQueryRequest() : request;
+    }
+
+    private Page<InternshipTask> buildTaskPage(TaskQueryRequest query) {
+        return new Page<>(Math.max(1, query.getPage()), Math.max(1, Math.min(50, query.getSize())));
+    }
+
+    private LambdaQueryWrapper<InternshipTask> buildSearchTaskWrapper(TaskQueryRequest query) {
         LambdaQueryWrapper<InternshipTask> wrapper = new LambdaQueryWrapper<>();
         wrapper.orderByDesc(InternshipTask::getRewardAmount)
                 .orderByAsc(InternshipTask::getPriority)
                 .orderByDesc(InternshipTask::getCreatedAt);
 
-        if (StringUtils.hasText(query.getKeyword())) {
-            wrapper.and(w -> w.like(InternshipTask::getTitle, query.getKeyword())
-                    .or()
-                    .like(InternshipTask::getDescription, query.getKeyword())
-                    .or()
-                    .like(InternshipTask::getTags, query.getKeyword())
-                    .or()
-                    .like(InternshipTask::getLocation, query.getKeyword()));
+        applyKeywordFilters(wrapper, query);
+        applySearchStatusFilter(wrapper, query);
+        applyCategoryAndPriorityFilters(wrapper, query);
+        return wrapper;
+    }
+
+    private void applyKeywordFilters(LambdaQueryWrapper<InternshipTask> wrapper, TaskQueryRequest query) {
+        if (!StringUtils.hasText(query.getKeyword())) {
+            return;
         }
 
+        wrapper.and(w -> w.like(InternshipTask::getTitle, query.getKeyword())
+                .or()
+                .like(InternshipTask::getDescription, query.getKeyword())
+                .or()
+                .like(InternshipTask::getTags, query.getKeyword())
+                .or()
+                .like(InternshipTask::getLocation, query.getKeyword()));
+    }
+
+    private void applySearchStatusFilter(LambdaQueryWrapper<InternshipTask> wrapper, TaskQueryRequest query) {
         if (StringUtils.hasText(query.getStatus())) {
             wrapper.eq(InternshipTask::getStatus, query.getStatus().toUpperCase());
-        } else {
-            wrapper.eq(InternshipTask::getStatus, "OPEN");
+            return;
         }
 
+        wrapper.eq(InternshipTask::getStatus, "OPEN");
+    }
+
+    private void applyTaskQueryFilters(LambdaQueryWrapper<InternshipTask> wrapper, TaskQueryRequest query) {
+        if (StringUtils.hasText(query.getStatus())) {
+            wrapper.eq(InternshipTask::getStatus, query.getStatus().toUpperCase());
+        }
+        applyKeywordFilters(wrapper, query);
+        applyCategoryAndPriorityFilters(wrapper, query);
+    }
+
+    private void applyCategoryAndPriorityFilters(LambdaQueryWrapper<InternshipTask> wrapper, TaskQueryRequest query) {
         if (StringUtils.hasText(query.getCategory())) {
             wrapper.eq(InternshipTask::getCategory, query.getCategory().toUpperCase());
         }
@@ -143,47 +290,57 @@ public class TaskAppServiceImpl implements TaskAppService {
         if (query.getMaxPriority() != null) {
             wrapper.le(InternshipTask::getPriority, query.getMaxPriority());
         }
-
-        return taskMapper.selectPage(page, wrapper);
     }
 
-    @Override
-    public InternshipTask detail(Long id) {
+    private InternshipTask loadTaskById(Long id) {
         InternshipTask task = taskMapper.selectById(id);
         if (task == null) {
-            throw new BizException(4041, "task not found");
+            throw new BizException(ErrorCode.TASK_NOT_FOUND);
         }
-
-        task.setViewCount((task.getViewCount() == null ? 0 : task.getViewCount()) + 1);
-        task.setUpdatedAt(LocalDateTime.now());
-        taskMapper.updateById(task);
-
-        cacheClient.delete(TASK_DETAIL_CACHE_KEY_PREFIX + id);
-        redisTemplate.opsForZSet().add(HOT_KEY, String.valueOf(task.getId()), hotScore(task));
         return task;
     }
 
-    @Override
-    public List<InternshipTask> hot() {
-        Set<String> ids = redisTemplate.opsForZSet().reverseRange(HOT_KEY, 0, 9);
+    private void refreshTaskDetailStats(InternshipTask task) {
+        task.setViewCount((task.getViewCount() == null ? 0 : task.getViewCount()) + 1);
+        task.setUpdatedAt(LocalDateTime.now());
+        taskMapper.updateById(task);
+    }
+
+    private void refreshHotTaskCache(InternshipTask task) {
+        cacheClient.delete(TASK_DETAIL_CACHE_KEY_PREFIX + task.getId());
+        redisTemplate.opsForZSet().add(HOT_KEY, String.valueOf(task.getId()), calculateHotScore(task));
+    }
+
+    private List<Long> loadHotTaskIds() {
+        Set<String> ids = queryHotTaskIds();
         if (ids == null || ids.isEmpty()) {
             rebuildHot();
-            ids = redisTemplate.opsForZSet().reverseRange(HOT_KEY, 0, 9);
+            ids = queryHotTaskIds();
         }
         if (ids == null || ids.isEmpty()) {
             return Collections.emptyList();
         }
 
-        List<CompletableFuture<InternshipTask>> futures = new ArrayList<>();
-        for (String id : ids) {
-            final Long taskId = Long.valueOf(id);
-            futures.add(CompletableFuture.supplyAsync(new Supplier<InternshipTask>() {
-                @Override
-                public InternshipTask get() {
-                    return queryTaskWithCacheProtection(taskId);
-                }
-            }, taskQueryExecutor));
+        return ids.stream()
+                .map(Long::valueOf)
+                .collect(Collectors.toList());
+    }
+
+    private Set<String> queryHotTaskIds() {
+        return redisTemplate.opsForZSet().reverseRange(HOT_KEY, 0, 9);
+    }
+
+    private List<InternshipTask> loadHotTasks(List<Long> taskIds) {
+        if (taskIds.isEmpty()) {
+            return Collections.emptyList();
         }
+
+        List<CompletableFuture<InternshipTask>> futures = taskIds.stream()
+                .map(taskId -> CompletableFuture.supplyAsync(
+                        () -> queryTaskWithCacheProtection(taskId),
+                        taskQueryExecutor
+                ))
+                .collect(Collectors.toList());
 
         return futures.stream()
                 .map(CompletableFuture::join)
@@ -191,45 +348,42 @@ public class TaskAppServiceImpl implements TaskAppService {
                 .collect(Collectors.toList());
     }
 
-    @Override
-    public void acceptTask(Long id) {
-        InternshipTask task = taskMapper.selectById(id);
-        if (task == null) {
-            throw new BizException(4041, "task not found");
-        }
-
+    private Long requireCurrentUserId() {
         Long uid = UserContext.userId();
         if (uid == null) {
             throw new BizException(401, "user not logged in");
         }
+        return uid;
+    }
+
+    private void validateTaskAcceptance(InternshipTask task) {
         if ("CANCELLED".equals(task.getStatus())) {
             throw new BizException(ErrorCode.TASK_CANCELLED);
         }
         if (!"OPEN".equals(task.getStatus())) {
             throw new BizException(4100, "only open task can be accepted");
         }
+    }
 
+    private void markTaskAccepted(InternshipTask task, Long userId) {
         LocalDateTime now = LocalDateTime.now();
-        task.setAcceptorId(uid);
+        task.setAcceptorId(userId);
         task.setAcceptedAt(now);
         task.setStatus("TAKEN");
         task.setUpdatedAt(now);
         taskMapper.updateById(task);
     }
 
-    @Override
-    public void cancelTask(Long id, Long uid, String reason) {
-        InternshipTask task = taskMapper.selectById(id);
-        if (task == null) {
-            throw new BizException(4041, "task not found");
-        }
-        if (!uid.equals(task.getPublisherId())) {
+    private void validateTaskCancellation(InternshipTask task, Long userId) {
+        if (userId == null || !userId.equals(task.getPublisherId())) {
             throw new BizException(4033, "only publisher can cancel task");
         }
         if (!"OPEN".equals(task.getStatus())) {
             throw new BizException(4108, "only open task can be cancelled");
         }
+    }
 
+    private void markTaskCancelled(InternshipTask task, String reason) {
         LocalDateTime now = LocalDateTime.now();
         task.setCancelledAt(now);
         task.setCancelReason(reason);
@@ -238,196 +392,198 @@ public class TaskAppServiceImpl implements TaskAppService {
         taskMapper.updateById(task);
     }
 
-    @Override
-    public IPage<InternshipTask> publishedTasks(Long uid, TaskQueryRequest request) {
-        TaskQueryRequest query = request == null ? new TaskQueryRequest() : request;
-        Page<InternshipTask> page = new Page<>(Math.max(1, query.getPage()), Math.max(1, Math.min(50, query.getSize())));
-
+    private LambdaQueryWrapper<InternshipTask> buildPublishedTaskWrapper(Long userId, TaskQueryRequest query) {
         LambdaQueryWrapper<InternshipTask> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(InternshipTask::getPublisherId, uid)
+        wrapper.eq(InternshipTask::getPublisherId, userId)
                 .orderByDesc(InternshipTask::getCreatedAt);
-
-        if (StringUtils.hasText(query.getStatus())) {
-            wrapper.eq(InternshipTask::getStatus, query.getStatus().toUpperCase());
-        }
-        if (StringUtils.hasText(query.getCategory())) {
-            wrapper.eq(InternshipTask::getCategory, query.getCategory().toUpperCase());
-        }
-        if (StringUtils.hasText(query.getKeyword())) {
-            wrapper.and(w -> w.like(InternshipTask::getTitle, query.getKeyword())
-                    .or()
-                    .like(InternshipTask::getDescription, query.getKeyword())
-                    .or()
-                    .like(InternshipTask::getTags, query.getKeyword())
-                    .or()
-                    .like(InternshipTask::getLocation, query.getKeyword()));
-        }
-        if (query.getMinPriority() != null) {
-            wrapper.ge(InternshipTask::getPriority, query.getMinPriority());
-        }
-        if (query.getMaxPriority() != null) {
-            wrapper.le(InternshipTask::getPriority, query.getMaxPriority());
-        }
-
-        return taskMapper.selectPage(page, wrapper);
+        applyTaskQueryFilters(wrapper, query);
+        return wrapper;
     }
 
-    @Override
-    public IPage<InternshipTask> acceptedTasks(Long uid, TaskQueryRequest request) {
-        TaskQueryRequest query = request == null ? new TaskQueryRequest() : request;
-        Page<InternshipTask> page = new Page<>(Math.max(1, query.getPage()), Math.max(1, Math.min(50, query.getSize())));
-
+    private LambdaQueryWrapper<InternshipTask> buildAcceptedTaskWrapper(Long userId, TaskQueryRequest query) {
         LambdaQueryWrapper<InternshipTask> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(InternshipTask::getAcceptorId, uid)
+        wrapper.eq(InternshipTask::getAcceptorId, userId)
                 .orderByDesc(InternshipTask::getCreatedAt);
-
-        if (StringUtils.hasText(query.getStatus())) {
-            wrapper.eq(InternshipTask::getStatus, query.getStatus().toUpperCase());
-        }
-        if (StringUtils.hasText(query.getCategory())) {
-            wrapper.eq(InternshipTask::getCategory, query.getCategory().toUpperCase());
-        }
-        if (StringUtils.hasText(query.getKeyword())) {
-            wrapper.and(w -> w.like(InternshipTask::getTitle, query.getKeyword())
-                    .or()
-                    .like(InternshipTask::getDescription, query.getKeyword())
-                    .or()
-                    .like(InternshipTask::getTags, query.getKeyword())
-                    .or()
-                    .like(InternshipTask::getLocation, query.getKeyword()));
-        }
-        if (query.getMinPriority() != null) {
-            wrapper.ge(InternshipTask::getPriority, query.getMinPriority());
-        }
-        if (query.getMaxPriority() != null) {
-            wrapper.le(InternshipTask::getPriority, query.getMaxPriority());
-        }
-
-        return taskMapper.selectPage(page, wrapper);
+        applyTaskQueryFilters(wrapper, query);
+        return wrapper;
     }
 
-    @Override
-    public IPage<InternshipTask> reviewTasks(Long uid, TaskQueryRequest request) {
-        TaskQueryRequest query = request == null ? new TaskQueryRequest() : request;
-        Page<InternshipTask> page = new Page<>(Math.max(1, query.getPage()), Math.max(1, Math.min(50, query.getSize())));
-
-        LambdaQueryWrapper<InternshipTask> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(InternshipTask::getPublisherId, uid)
+    private LambdaQueryWrapper<InternshipTask> buildReviewTaskWrapper(Long userId) {
+        return new LambdaQueryWrapper<InternshipTask>()
+                .eq(InternshipTask::getPublisherId, userId)
                 .eq(InternshipTask::getStatus, "SUBMITTED")
                 .orderByDesc(InternshipTask::getSubmittedAt);
-
-        return taskMapper.selectPage(page, wrapper);
     }
 
-    @Override
-    public void submitTask(Long id, Long uid, SubmitTaskRequest submitTaskRequest) {
-        InternshipTask task = taskMapper.selectById(id);
-        if (task == null) {
-            throw new BizException(ErrorCode.TASK_NOT_FOUND);
+    private void validateSubmitTaskRequest(SubmitTaskRequest request) {
+        if (request == null || !StringUtils.hasText(request.getContent())) {
+            throw new BizException(4002, "submit content can not be blank");
         }
-        if (!uid.equals(task.getAcceptorId())) {
+    }
+
+    private SubmitTaskContext prepareSubmitTaskContext(Long taskId, Long userId, SubmitTaskRequest request) {
+        InternshipTask task = loadTaskById(taskId);
+        validateTaskSubmission(task, userId);
+
+        LocalDateTime now = LocalDateTime.now();
+        SubmitTaskContext context = new SubmitTaskContext();
+        context.setTask(task);
+        context.setUserId(userId);
+        context.setRequest(request);
+        context.setRoundNo(loadNextSubmissionRound(taskId));
+        context.setSubmittedAt(now);
+        context.setSubmission(buildTaskSubmission(taskId, userId, request, context.getRoundNo(), now));
+        return context;
+    }
+
+    private void validateTaskSubmission(InternshipTask task, Long userId) {
+        if (userId == null || !userId.equals(task.getAcceptorId())) {
             throw new BizException(4031, "only acceptor can submit task");
         }
         if (!"TAKEN".equals(task.getStatus())) {
             throw new BizException(4101, "only taken task can be submitted");
         }
+    }
 
-        Long count = taskSubmissionMapper.selectCount(
-                new LambdaQueryWrapper<TaskSubmission>()
-                        .eq(TaskSubmission::getTaskId, id)
-        );
-        Integer roundNo = (count == null ? 0 : count.intValue()) + 1;
-        LocalDateTime now = LocalDateTime.now();
+    private Integer loadNextSubmissionRound(Long taskId) {
+        Long count = taskSubmissionMapper.selectCount(new LambdaQueryWrapper<TaskSubmission>()
+                .eq(TaskSubmission::getTaskId, taskId));
+        return (count == null ? 0 : count.intValue()) + 1;
+    }
 
+    private TaskSubmission buildTaskSubmission(Long taskId,
+                                               Long userId,
+                                               SubmitTaskRequest request,
+                                               Integer roundNo,
+                                               LocalDateTime submittedAt) {
         TaskSubmission submission = new TaskSubmission();
-        submission.setTaskId(id);
-        submission.setSubmitUserId(uid);
+        submission.setTaskId(taskId);
+        submission.setSubmitUserId(userId);
         submission.setRoundNo(roundNo);
-        submission.setContent(submitTaskRequest.getContent());
-        submission.setProofUrls(submitTaskRequest.getProofUrls());
+        submission.setContent(request.getContent());
+        submission.setProofUrls(request.getProofUrls());
         submission.setStatus("SUBMITTED");
-        submission.setSubmittedAt(now);
-        submission.setCreatedAt(now);
-        submission.setUpdatedAt(now);
-        taskSubmissionMapper.insert(submission);
+        submission.setSubmittedAt(submittedAt);
+        submission.setCreatedAt(submittedAt);
+        submission.setUpdatedAt(submittedAt);
+        return submission;
+    }
 
+    private void executeTaskSubmission(SubmitTaskContext context) {
+        taskSubmissionMapper.insert(context.getSubmission());
+
+        InternshipTask task = context.getTask();
         task.setStatus("SUBMITTED");
-        task.setSubmittedAt(now);
-        task.setUpdatedAt(now);
+        task.setSubmittedAt(context.getSubmittedAt());
+        task.setUpdatedAt(context.getSubmittedAt());
         taskMapper.updateById(task);
+    }
+
+    private void handleAfterTaskSubmitted(SubmitTaskContext context) {
+        InternshipTask task = context.getTask();
+        TaskSubmission submission = context.getSubmission();
 
         TaskSubmittedEvent taskSubmittedEvent = new TaskSubmittedEvent(
                 UUID.randomUUID().toString().replace("-", ""),
                 task.getId(),
                 submission.getId(),
                 task.getPublisherId(),
-                uid,
-                roundNo,
-                submitTaskRequest.getContent(),
-                submitTaskRequest.getProofUrls(),
-                now
+                context.getUserId(),
+                context.getRoundNo(),
+                context.getRequest().getContent(),
+                context.getRequest().getProofUrls(),
+                context.getSubmittedAt()
         );
         taskEventProducer.sendTaskSubmitted(taskSubmittedEvent);
     }
 
-    @Override
-    public void approveTask(Long id, Long uid) {
-        InternshipTask task = taskMapper.selectById(id);
-        if (task == null) {
-            throw new BizException(ErrorCode.TASK_NOT_FOUND);
-        }
-        if (!uid.equals(task.getPublisherId())) {
-            throw new BizException(4032, "only publisher can approve task");
-        }
-        if (!"SUBMITTED".equals(task.getStatus())) {
-            throw new BizException(4102, "only submitted task can be approved");
-        }
+    private ApproveTaskContext prepareApproveTaskContext(Long taskId, Long userId) {
+        ApproveTaskContext context = new ApproveTaskContext();
+        context.setTask(loadTaskById(taskId));
+        context.setUserId(userId);
+        context.setLatestSubmission(loadLatestSubmission(taskId));
+        context.setPendingSettlement(loadPendingTaskSettlement(taskId));
+        context.setApprovedAt(LocalDateTime.now());
+        return context;
+    }
 
+    private TaskSubmission loadLatestSubmission(Long taskId) {
         TaskSubmission latestSubmission = taskSubmissionMapper.selectOne(
                 new LambdaQueryWrapper<TaskSubmission>()
-                        .eq(TaskSubmission::getTaskId, id)
+                        .eq(TaskSubmission::getTaskId, taskId)
                         .orderByDesc(TaskSubmission::getRoundNo)
                         .last("limit 1")
         );
         if (latestSubmission == null) {
             throw new BizException(4045, "task submission not found");
         }
-        if (!"SUBMITTED".equals(latestSubmission.getStatus())) {
-            throw new BizException(4103, "latest submission is not in submitted status");
-        }
+        return latestSubmission;
+    }
 
-        TaskSettlement existedSettlement = taskSettlementMapper.selectOne(
+    private TaskSettlement loadPendingTaskSettlement(Long taskId) {
+        return taskSettlementMapper.selectOne(
                 new LambdaQueryWrapper<TaskSettlement>()
-                        .eq(TaskSettlement::getTaskId, task.getId())
+                        .eq(TaskSettlement::getTaskId, taskId)
                         .eq(TaskSettlement::getStatus, "PENDING")
                         .last("limit 1")
         );
-        if (existedSettlement != null) {
+    }
+
+    private void validateTaskApproval(ApproveTaskContext context) {
+        InternshipTask task = context.getTask();
+        if (context.getUserId() == null || !context.getUserId().equals(task.getPublisherId())) {
+            throw new BizException(4032, "only publisher can approve task");
+        }
+        if (!"SUBMITTED".equals(task.getStatus())) {
+            throw new BizException(4102, "only submitted task can be approved");
+        }
+        if (!"SUBMITTED".equals(context.getLatestSubmission().getStatus())) {
+            throw new BizException(4103, "latest submission is not in submitted status");
+        }
+        if (context.getPendingSettlement() != null) {
             throw new BizException(4106, "task settlement already pending");
         }
+    }
 
-        LocalDateTime now = LocalDateTime.now();
+    private void executeTaskApproval(ApproveTaskContext context) {
+        LocalDateTime approvedAt = context.getApprovedAt();
+        TaskSubmission latestSubmission = context.getLatestSubmission();
         latestSubmission.setStatus("APPROVED");
-        latestSubmission.setReviewedAt(now);
-        latestSubmission.setUpdatedAt(now);
+        latestSubmission.setReviewedAt(approvedAt);
+        latestSubmission.setUpdatedAt(approvedAt);
         taskSubmissionMapper.updateById(latestSubmission);
 
+        TaskSettlement settlement = buildPendingTaskSettlement(context.getTask(), latestSubmission, approvedAt);
+        taskSettlementMapper.insert(settlement);
+        context.setSettlement(settlement);
+
+        InternshipTask task = context.getTask();
+        task.setStatus("SETTLEMENT_PENDING");
+        task.setApprovedAt(approvedAt);
+        task.setUpdatedAt(approvedAt);
+        taskMapper.updateById(task);
+    }
+
+    private TaskSettlement buildPendingTaskSettlement(InternshipTask task,
+                                                      TaskSubmission submission,
+                                                      LocalDateTime approvedAt) {
         TaskSettlement settlement = new TaskSettlement();
         settlement.setTaskId(task.getId());
-        settlement.setSubmissionId(latestSubmission.getId());
+        settlement.setSubmissionId(submission.getId());
         settlement.setPublisherId(task.getPublisherId());
         settlement.setAcceptorId(task.getAcceptorId());
         settlement.setSettleAmount(task.getSettleAmount());
         settlement.setStatus("PENDING");
         settlement.setMessageId(UUID.randomUUID().toString().replace("-", ""));
-        settlement.setCreatedAt(now);
-        settlement.setUpdatedAt(now);
-        taskSettlementMapper.insert(settlement);
+        settlement.setCreatedAt(approvedAt);
+        settlement.setUpdatedAt(approvedAt);
+        return settlement;
+    }
 
-        task.setStatus("SETTLEMENT_PENDING");
-        task.setApprovedAt(now);
-        task.setUpdatedAt(now);
-        taskMapper.updateById(task);
+    private void handleAfterTaskApproved(ApproveTaskContext context) {
+        TaskSettlement settlement = context.getSettlement();
+        InternshipTask task = context.getTask();
+        TaskSubmission latestSubmission = context.getLatestSubmission();
 
         TaskSettlementRequestedEvent event = new TaskSettlementRequestedEvent(
                 settlement.getMessageId(),
@@ -438,53 +594,57 @@ public class TaskAppServiceImpl implements TaskAppService {
                 task.getAcceptorId(),
                 task.getTradeOrderNo(),
                 task.getSettleAmount(),
-                now
+                context.getApprovedAt()
         );
         taskEventProducer.sendTaskSettlementRequested(event);
     }
 
-    @Override
-    public void rejectTask(Long id, Long uid, RejectTaskRequest request) {
-        InternshipTask task = taskMapper.selectById(id);
-        if (task == null) {
-            throw new BizException(ErrorCode.TASK_NOT_FOUND);
-        }
-        if (!uid.equals(task.getPublisherId())) {
+    private RejectTaskContext prepareRejectTaskContext(Long taskId, Long userId, RejectTaskRequest request) {
+        RejectTaskContext context = new RejectTaskContext();
+        context.setTask(loadTaskById(taskId));
+        context.setUserId(userId);
+        context.setRequest(request);
+        context.setLatestSubmission(loadLatestSubmission(taskId));
+        context.setReason(request == null ? null : request.getReason());
+        context.setReviewedAt(LocalDateTime.now());
+        return context;
+    }
+
+    private void validateTaskRejection(RejectTaskContext context) {
+        InternshipTask task = context.getTask();
+        if (context.getUserId() == null || !context.getUserId().equals(task.getPublisherId())) {
             throw new BizException(4032, "only publisher can reject task");
         }
         if (!"SUBMITTED".equals(task.getStatus())) {
             throw new BizException(4103, "only submitted task can be rejected");
         }
-
-        TaskSubmission latestSubmission = taskSubmissionMapper.selectOne(
-                new LambdaQueryWrapper<TaskSubmission>()
-                        .eq(TaskSubmission::getTaskId, id)
-                        .orderByDesc(TaskSubmission::getRoundNo)
-                        .last("limit 1")
-        );
-        if (latestSubmission == null) {
-            throw new BizException(4045, "task submission not found");
-        }
-        if (!"SUBMITTED".equals(latestSubmission.getStatus())) {
+        if (!"SUBMITTED".equals(context.getLatestSubmission().getStatus())) {
             throw new BizException(4104, "latest submission is not in submitted status");
         }
-
-        String reason = request == null ? null : request.getReason();
-        if (!StringUtils.hasText(reason)) {
+        if (!StringUtils.hasText(context.getReason())) {
             throw new BizException(4105, "reject reason can not be blank");
         }
+    }
 
-        LocalDateTime now = LocalDateTime.now();
+    private void executeTaskRejection(RejectTaskContext context) {
+        LocalDateTime reviewedAt = context.getReviewedAt();
+        TaskSubmission latestSubmission = context.getLatestSubmission();
         latestSubmission.setStatus("REJECTED");
-        latestSubmission.setRejectReason(reason);
-        latestSubmission.setReviewedAt(now);
-        latestSubmission.setUpdatedAt(now);
+        latestSubmission.setRejectReason(context.getReason());
+        latestSubmission.setReviewedAt(reviewedAt);
+        latestSubmission.setUpdatedAt(reviewedAt);
         taskSubmissionMapper.updateById(latestSubmission);
 
+        InternshipTask task = context.getTask();
         task.setStatus("TAKEN");
-        task.setRejectReason(reason);
-        task.setUpdatedAt(now);
+        task.setRejectReason(context.getReason());
+        task.setUpdatedAt(reviewedAt);
         taskMapper.updateById(task);
+    }
+
+    private void handleAfterTaskRejected(RejectTaskContext context) {
+        InternshipTask task = context.getTask();
+        TaskSubmission latestSubmission = context.getLatestSubmission();
 
         TaskRejectedEvent taskRejectedEvent = new TaskRejectedEvent(
                 UUID.randomUUID().toString().replace("-", ""),
@@ -493,27 +653,28 @@ public class TaskAppServiceImpl implements TaskAppService {
                 task.getPublisherId(),
                 task.getAcceptorId(),
                 latestSubmission.getRoundNo(),
-                reason,
-                now
+                context.getReason(),
+                context.getReviewedAt()
         );
         taskEventProducer.sendTaskRejected(taskRejectedEvent);
     }
 
-    @Scheduled(cron = "0 */5 * * * ?")
-    public void rebuildHot() {
-        List<InternshipTask> list = taskMapper.selectList(new LambdaQueryWrapper<InternshipTask>()
+    private List<InternshipTask> loadHotCandidateTasks() {
+        return taskMapper.selectList(new LambdaQueryWrapper<InternshipTask>()
                 .in(InternshipTask::getStatus, "OPEN", "TAKEN", "SUBMITTED")
                 .orderByDesc(InternshipTask::getRewardAmount)
                 .orderByDesc(InternshipTask::getCreatedAt)
                 .last("limit 200"));
+    }
 
+    private void refreshHotRanking(List<InternshipTask> tasks) {
         redisTemplate.delete(HOT_KEY);
-        for (InternshipTask task : list) {
-            redisTemplate.opsForZSet().add(HOT_KEY, String.valueOf(task.getId()), hotScore(task));
+        for (InternshipTask task : tasks) {
+            redisTemplate.opsForZSet().add(HOT_KEY, String.valueOf(task.getId()), calculateHotScore(task));
         }
     }
 
-    private double hotScore(InternshipTask task) {
+    private double calculateHotScore(InternshipTask task) {
         double reward = task.getRewardAmount() == null ? 0D : task.getRewardAmount().doubleValue();
         double views = task.getViewCount() == null ? 0D : task.getViewCount();
         double comments = task.getCommentCount() == null ? 0D : task.getCommentCount();
@@ -532,10 +693,52 @@ public class TaskAppServiceImpl implements TaskAppService {
         );
     }
 
-    private BigDecimal defaultAmount(BigDecimal amount) {
+    private BigDecimal normalizeAmount(BigDecimal amount) {
         if (amount == null || amount.compareTo(BigDecimal.ZERO) < 0) {
             return BigDecimal.ZERO;
         }
         return amount;
+    }
+
+    private String generateTradeOrderNo() {
+        return "TRD" + System.currentTimeMillis() + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
+    }
+
+    @Data
+    private static class CreateTaskContext {
+        private CreateTaskRequest request;
+        private Long ownerId;
+        private UserInfoDTO ownerInfo;
+        private InternshipTask task;
+    }
+
+    @Data
+    private static class SubmitTaskContext {
+        private InternshipTask task;
+        private Long userId;
+        private SubmitTaskRequest request;
+        private Integer roundNo;
+        private LocalDateTime submittedAt;
+        private TaskSubmission submission;
+    }
+
+    @Data
+    private static class ApproveTaskContext {
+        private InternshipTask task;
+        private Long userId;
+        private LocalDateTime approvedAt;
+        private TaskSubmission latestSubmission;
+        private TaskSettlement pendingSettlement;
+        private TaskSettlement settlement;
+    }
+
+    @Data
+    private static class RejectTaskContext {
+        private InternshipTask task;
+        private Long userId;
+        private RejectTaskRequest request;
+        private String reason;
+        private LocalDateTime reviewedAt;
+        private TaskSubmission latestSubmission;
     }
 }

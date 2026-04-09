@@ -1,8 +1,17 @@
 import axios from "axios";
+import { clearAuth, getToken } from "../utils/auth";
 
 const aiHttp = axios.create({
   baseURL: import.meta.env.VITE_AI_API_BASE_URL || "/ai-api",
-  timeout: 15000
+  timeout: 20000
+});
+
+aiHttp.interceptors.request.use((config) => {
+  const token = getToken();
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
 });
 
 aiHttp.interceptors.response.use(
@@ -13,7 +22,12 @@ aiHttp.interceptors.response.use(
     }
     return Promise.reject(new Error(payload?.message || "AI 请求失败"));
   },
-  (error) => Promise.reject(error)
+  (error) => {
+    if (error.response?.status === 401) {
+      clearAuth();
+    }
+    return Promise.reject(error);
+  }
 );
 
 export function getAiSessions(type = "chat") {
@@ -28,6 +42,26 @@ export function getAiSessionHistory(chatId) {
   return aiHttp.get(`/ai-proxy/history/session/${chatId}`);
 }
 
-export function sendAiChat(data) {
-  return aiHttp.post("/ai-proxy/chat", data);
+export function listAiMemories() {
+  return aiHttp.get("/ai-proxy/memory");
+}
+
+export function listSessionMemories(chatId) {
+  return aiHttp.get(`/ai-proxy/memory/session/${chatId}`);
+}
+
+export function saveAiMemory(data) {
+  return aiHttp.post("/ai-proxy/memory", data);
+}
+
+export function updateSessionMemorySelection(data) {
+  return aiHttp.put("/ai-proxy/memory/select", data);
+}
+
+export function deleteAiMemory(memoryId) {
+  return aiHttp.delete(`/ai-proxy/memory/${memoryId}`);
+}
+
+export function prepareAiChat(data) {
+  return aiHttp.post("/ai-proxy/chat/prepare", data);
 }

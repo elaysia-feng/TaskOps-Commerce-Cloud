@@ -1,6 +1,7 @@
 package com.elias.auth.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -9,26 +10,33 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("login_log")
-@Schema(name = "LoginLog", description = "登录日志")
+@TableName("auth_login_log")
+@Schema(name = "LoginLog", description = "Login log")
 public class LoginLog {
 
     @TableId(type = IdType.AUTO)
-    @Schema(description = "主键ID")
+    @Schema(description = "Primary key")
     private Long id;
 
-    @Schema(description = "用户名")
+    @Schema(description = "User ID")
+    private Long userId;
+
+    @Schema(description = "Username")
     private String username;
 
-    @Schema(description = "IP地址")
-    private String ip;
+    @Schema(description = "Login type")
+    private String loginType;
 
-    @Schema(description = "是否成功，1=成功，0=失败")
+    @Schema(description = "Success flag")
     private Integer success;
 
-    @Schema(description = "结果描述")
+    @Schema(description = "Login IP")
+    private String ip;
+
+    @TableField("fail_reason")
+    @Schema(description = "Result message")
     private String message;
 
-    @Schema(description = "创建时间")
+    @Schema(description = "Created at")
     private LocalDateTime createdAt;
 }

@@ -10,6 +10,7 @@ import java.util.UUID;
 
 @Service
 public class TaskAiServiceImpl implements TaskAiService {
+
     private final ChatClient chatClient;
 
     public TaskAiServiceImpl(ChatClient chatClient) {
@@ -18,15 +19,19 @@ public class TaskAiServiceImpl implements TaskAiService {
 
     @Override
     public Flux<String> chat(String question) {
-        String userId = UUID.randomUUID().toString();
-        // 把会话id放入mysql库中
+        String conversationId = createConversationId();
+        return streamTaskAnswer(question, conversationId);
+    }
 
+    private String createConversationId() {
+        return UUID.randomUUID().toString();
+    }
+
+    private Flux<String> streamTaskAnswer(String question, String conversationId) {
         return chatClient
-                /// 开始构建一次 Prompt / 请求
                 .prompt()
-                ///
                 .user(question)
-                .advisors(s -> {s.param(ChatMemory.CONVERSATION_ID, userId);})
+                .advisors(spec -> spec.param(ChatMemory.CONVERSATION_ID, conversationId))
                 .stream()
                 .content();
     }

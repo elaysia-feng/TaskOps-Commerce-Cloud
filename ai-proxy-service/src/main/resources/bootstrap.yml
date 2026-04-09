@@ -1,0 +1,19 @@
+spring:
+  application:
+    name: notification-service
+  cloud:
+    nacos:
+      server-addr: ${NACOS_ADDR:${TASKOPS_MW_HOST:192.168.88.100}:8848}
+      discovery:
+        namespace: ${NACOS_NAMESPACE:public}
+      config:
+        namespace: ${NACOS_NAMESPACE:public}
+        file-extension: yaml
+        shared-configs:
+          - data-id: ai-service.yaml
+            group: ${NACOS_GROUP:DEFAULT_GROUP}
+            refresh: true
+
+  config:
+    import:
+      - optional:nacos:${spring.application.name}.yaml

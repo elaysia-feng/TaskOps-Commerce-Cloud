@@ -6,18 +6,32 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
+import java.time.LocalDateTime;
+
 @Data
-@TableName("sys_role")
-@Schema(name = "Role", description = "角色实体")
+@TableName("auth_role")
+@Schema(name = "Role", description = "Role entity")
 public class Role {
 
     @TableId(type = IdType.AUTO)
-    @Schema(description = "主键ID")
+    @Schema(description = "Primary key")
     private Long id;
 
-    @Schema(description = "角色编码", example = "USER")
+    @Schema(description = "Role code")
     private String roleCode;
 
-    @Schema(description = "角色名称")
+    @Schema(description = "Role name")
     private String roleName;
+
+    @Schema(description = "Role scope")
+    private String roleScope;
+
+    @Schema(description = "Role status")
+    private String status;
+
+    @Schema(description = "Created at")
+    private LocalDateTime createdAt;
+
+    @Schema(description = "Updated at")
+    private LocalDateTime updatedAt;
 }
